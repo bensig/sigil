@@ -1,0 +1,12 @@
+node_modules/
+dist/
+.vite/
+*.log
+.DS_Store
+
+# Private wallet configs — never commit real xpubs/labels/recipients.
+# The example/ config is the only tracked wallet.
+src/configs/*/
+!src/configs/example/
+src/configs/wallets.json
+src/data/*/

@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sigil — self-hosted Bitcoin multisig coordination</title>
+<meta name="description" content="Sigil is a stateless, watch-only Bitcoin multisig coordinator you run on your own machine. Ledger signing over WebUSB, PSBT airgap support. Open source, MIT.">
+<link rel="canonical" href="https://bitcoinsigil.com/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Sigil">
+<meta property="og:title" content="Sigil — self-hosted Bitcoin multisig coordination">
+<meta property="og:description" content="A stateless, watch-only multisig coordinator you run on your own machine. Ledger over WebUSB, PSBT airgap, any M-of-N quorum. Open source, MIT. Powered by Caravan.">
+<meta property="og:url" content="https://bitcoinsigil.com/">
+<meta property="og:image" content="https://bitcoinsigil.com/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Sigil logo — a circular seal enclosing a three-node quorum mark">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Sigil — self-hosted Bitcoin multisig coordination">
+<meta name="twitter:description" content="A stateless, watch-only multisig coordinator you run on your own machine. Ledger over WebUSB, PSBT airgap, any M-of-N quorum. Open source, MIT.">
+<meta name="twitter:image" content="https://bitcoinsigil.com/og.png">
+<link rel="icon" href="logo.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --paper: #fafaf8;
+    --ink: #111111;
+    --hairline: #e2e0da;
+    --muted: #6e6c66;
+    --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+    --grotesk: "Space Grotesk", system-ui, sans-serif;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    .rise { animation: none !important; opacity: 1 !important; }
+  }
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--grotesk);
+    font-size: 17px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: inherit; }
+  a:focus-visible, button:focus-visible {
+    outline: 2px solid var(--ink);
+    outline-offset: 3px;
+  }
+  .wrap {
+    max-width: 880px;
+    margin: 0 auto;
+    padding: 0 24px;
+  }
+
+  /* ---------- hero ---------- */
+  .hero {
+    padding: 72px 0 88px;
+    text-align: center;
+    border-bottom: 1px solid var(--hairline);
+  }
+  .hero img {
+    width: 220px;
+    max-width: 60vw;
+    height: auto;
+    display: block;
+    margin: 0 auto 40px;
+    mix-blend-mode: multiply;
+  }
+  .rise {
+    opacity: 0;
+    animation: rise .7s ease-out forwards;
+  }
+  .rise-2 { animation-delay: .12s; }
+  .rise-3 { animation-delay: .24s; }
+  @keyframes rise {
+    from { opacity: 0; transform: translateY(10px); }
+    to   { opacity: 1; transform: none; }
+  }
+  h1 {
+    font-size: clamp(1.7rem, 4.6vw, 2.6rem);
+    font-weight: 600;
+    line-height: 1.18;
+    letter-spacing: -0.015em;
+    max-width: 21ch;
+    margin: 0 auto 18px;
+  }
+  .hero .sub {
+    color: var(--muted);
+    max-width: 52ch;
+    margin: 0 auto 40px;
+  }
+  .hero .sub a { color: var(--ink); text-underline-offset: 3px; }
+  .cta-row {
+    display: flex;
+    gap: 14px;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+  .btn {
+    font-family: var(--grotesk);
+    font-size: 0.95rem;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+    text-decoration: none;
+    padding: 13px 28px;
+    border: 1.5px solid var(--ink);
+    border-radius: 0;
+    transition: background-color .15s ease, color .15s ease;
+  }
+  .btn-solid { background: var(--ink); color: var(--paper); }
+  .btn-solid:hover { background: #333; border-color: #333; }
+  .btn-ghost { background: transparent; color: var(--ink); }
+  .btn-ghost:hover { background: var(--ink); color: var(--paper); }
+
+  /* ---------- section chrome ---------- */
+  section { padding: 72px 0; }
+  section + section { border-top: 1px solid var(--hairline); }
+  .eyebrow {
+    font-family: var(--grotesk);
+    font-size: 0.78rem;
+    font-weight: 500;
+    letter-spacing: 0.42em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 36px;
+  }
+  .eyebrow::after {
+    content: "";
+    display: block;
+    width: 40px;
+    border-top: 1.5px solid var(--ink);
+    margin-top: 12px;
+  }
+
+  /* ---------- features ---------- */
+  .features {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 44px 40px;
+  }
+  .feature svg {
+    display: block;
+    width: 44px;
+    height: 44px;
+    margin-bottom: 16px;
+    stroke: var(--ink);
+    stroke-width: 3.4;
+    fill: none;
+    stroke-linecap: round;
+  }
+  .feature h3 {
+    font-size: 1.02rem;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    margin-bottom: 6px;
+  }
+  .feature p {
+    font-size: 0.93rem;
+    color: var(--muted);
+  }
+  .feature p code {
+    font-family: var(--mono);
+    font-size: 0.85em;
+  }
+
+  /* ---------- security ---------- */
+  .seal {
+    border: 1.5px solid var(--ink);
+    padding: 36px 40px;
+    max-width: 640px;
+  }
+  .seal p { max-width: 56ch; }
+  .seal p + p { margin-top: 14px; }
+  .seal strong { font-weight: 600; }
+
+  /* ---------- quick start ---------- */
+  .terminal {
+    background: var(--ink);
+    color: var(--paper);
+    padding: 30px 34px;
+    overflow-x: auto;
+  }
+  .terminal pre {
+    font-family: var(--mono);
+    font-size: 0.92rem;
+    line-height: 1.9;
+    white-space: pre;
+  }
+  .terminal .p { color: #8a887f; user-select: none; }
+  .quick-note {
+    margin-top: 18px;
+    font-size: 0.93rem;
+    color: var(--muted);
+  }
+  .quick-note code { font-family: var(--mono); font-size: 0.86em; }
+
+  /* ---------- footer ---------- */
+  footer {
+    border-top: 1px solid var(--hairline);
+    padding: 36px 0 48px;
+    font-size: 0.85rem;
+    color: var(--muted);
+    text-align: center;
+    letter-spacing: 0.02em;
+  }
+  footer a { color: var(--muted); text-underline-offset: 3px; }
+  footer a:hover { color: var(--ink); }
+
+  @media (max-width: 560px) {
+    .hero { padding: 48px 0 64px; }
+    section { padding: 56px 0; }
+    .seal { padding: 26px 24px; }
+    .terminal { padding: 22px 20px; }
+  }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="wrap">
+    <img class="rise" src="logo.png" alt="Sigil — circular seal enclosing a three-node quorum mark" width="220" height="220">
+    <h1 class="rise rise-2">Self-hosted Bitcoin multisig coordination.</h1>
+    <p class="sub rise rise-2">A stateless, watch-only coordinator you run on your own machine. Sign directly with your Ledger over WebUSB, or airgap via PSBT. Open source, MIT. Powered by the <a href="https://github.com/caravan-bitcoin/caravan">Caravan</a> libraries.</p>
+    <nav class="cta-row rise rise-3" aria-label="Primary">
+      <a class="btn btn-solid" href="https://github.com/bensig/sigil">View on GitHub</a>
+      <a class="btn btn-ghost" href="#quick-start">Quick start</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <section id="features" aria-labelledby="features-h">
+    <div class="wrap">
+      <h2 class="eyebrow" id="features-h">The coordinator</h2>
+      <div class="features">
+        <div class="feature">
+          <svg viewBox="0 0 48 48" aria-hidden="true">
+            <path d="M24 10 L40 38 L8 38 Z"/>
+            <circle cx="24" cy="10" r="4.5" fill="#fafaf8"/>
+            <circle cx="40" cy="38" r="4.5" fill="#fafaf8"/>
+            <circle cx="8" cy="38" r="4.5" fill="#fafaf8"/>
+          </svg>
+          <h3>Any M-of-N quorum</h3>
+          <p>2-of-3, 3-of-5, whatever your setup calls for. Native segwit multisig (P2WSH).</p>
+        </div>
+        <div class="feature">
+          <svg viewBox="0 0 48 48" aria-hidden="true">
+            <circle cx="24" cy="28" r="12"/>
+            <path d="M24 4 V16"/>
+            <path d="M18 9 H30"/>
+          </svg>
+          <h3>Ledger over WebUSB</h3>
+          <p>Sign directly from a connected Ledger. No companion app in the middle.</p>
+        </div>
+        <div class="feature">
+          <svg viewBox="0 0 48 48" aria-hidden="true">
+            <circle cx="11" cy="24" r="7"/>
+            <circle cx="37" cy="24" r="7"/>
+            <path d="M21 24 H23" stroke-dasharray="0.1 6"/>
+            <path d="M25 24 H27" stroke-dasharray="0.1 6"/>
+          </svg>
+          <h3>PSBT in, PSBT out</h3>
+          <p>Import and export PSBTs for airgapped signers — Coldcard, SeedSigner, anything that speaks PSBT.</p>
+        </div>
+        <div class="feature">
+          <svg viewBox="0 0 48 48" aria-hidden="true">
+            <circle cx="24" cy="24" r="16"/>
+            <circle cx="24" cy="24" r="3.4" fill="#111111"/>
+          </svg>
+          <h3>Watch-only by design</h3>
+          <p>Configured with xpubs only. Private keys never touch the app.</p>
+        </div>
+        <div class="feature">
+          <svg viewBox="0 0 48 48" aria-hidden="true">
+            <circle cx="10" cy="24" r="5.5"/>
+            <circle cx="24" cy="24" r="5.5"/>
+            <circle cx="38" cy="24" r="5.5"/>
+          </svg>
+          <h3>Day-to-day tooling</h3>
+          <p>Multi-wallet switcher, address labels, recipient whitelist, live mempool fee estimates.</p>
+        </div>
+        <div class="feature">
+          <svg viewBox="0 0 48 48" aria-hidden="true">
+            <circle cx="24" cy="24" r="16"/>
+            <path d="M13 35 L35 13"/>
+          </svg>
+          <h3>Nothing else</h3>
+          <p>No server, no accounts, no telemetry. A static bundle plus a local API proxy.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="security" aria-labelledby="security-h">
+    <div class="wrap">
+      <h2 class="eyebrow" id="security-h">Trust boundary</h2>
+      <div class="seal">
+        <p><strong>Your xpubs stay in your build.</strong> Sigil compiles your wallet configuration into a bundle you run locally — nothing phones home, and no third party learns your addresses or balances.</p>
+        <p>The app builds and coordinates PSBTs; every signature comes from your own hardware. Anyone who can fetch a configured bundle can derive your addresses, so run it on your own machine and never host a configured build publicly.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="quick-start" aria-labelledby="quick-start-h">
+    <div class="wrap">
+      <h2 class="eyebrow" id="quick-start-h">Quick start</h2>
+      <div class="terminal">
+<pre><code><span class="p">$ </span>git clone https://github.com/bensig/sigil &amp;&amp; cd sigil
+<span class="p">$ </span>npm install
+<span class="p">$ </span>npm start</code></pre>
+      </div>
+      <p class="quick-note">First run shows a setup screen — add your network, quorum, and cosigner xpubs. Full config reference in the <a href="https://github.com/bensig/sigil#wallet-config-schema">README</a>.</p>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <a href="https://github.com/bensig/sigil/blob/main/LICENSE">MIT licensed</a> &middot; Built on <a href="https://github.com/caravan-bitcoin/caravan">Caravan</a> &middot; &copy; 2026 Ben Sigman
+  </div>
+</footer>
+
+</body>
+</html>

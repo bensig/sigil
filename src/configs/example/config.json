@@ -1,0 +1,19 @@
+{
+  "walletName": "Example 2-of-3 (testnet)",
+  "network": "testnet",
+  "client": {
+    "provider": "mempool",
+    "apiBaseUrl": "",
+    "fallbackProvider": "blockstream",
+    "fallbackApiBaseUrl": ""
+  },
+  "quorum": {
+    "requiredSigners": 2,
+    "totalSigners": 3
+  },
+  "signers": [
+    { "name": "Alpha",   "xpub": "tpubDFdL54W2wu8aWUdZcidpYVbwcX5WHWpnFAAqbNLXfEiAtYdCBgaNzuy8VbB6iCvgyby4PYwo6ajTau8cngspdGKpzGGYFJwz3zmMXyqfHX8",   "xfp": "397a4a50",   "bip32Path": "m/48'/1'/0'/2'" },
+    { "name": "Bravo",   "xpub": "tpubDE5NrpYFoYzmD9v28hipFP5uGDYvpC8z9zT5gbwhbtVuMzDdTaC2gM3CDo2kDKNuuwd9ZdoJCFyD51hg8kgmhnMRoe1UharQhrNKpkkmDn6",   "xfp": "c8e3b3d3",   "bip32Path": "m/48'/1'/0'/2'" },
+    { "name": "Charlie", "xpub": "tpubDEx1GBExdoRLtBV39Au8EcDjr8DUjdZ5jWPYF1pxCigg5NZTTt2coq9DR3nv4WL6MJXqnPP4YqdcCfaZDr1fokQCnNg5ViVaSpS483zAUWx", "xfp": "70ecd03a", "bip32Path": "m/48'/1'/0'/2'" }
+  ]
+}
