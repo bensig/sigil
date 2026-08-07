@@ -41,6 +41,7 @@ export function encodePsbtToSpecter(psbt: string, maxChunkLen = 100): QRFrameSou
   return {
     format: 'specter',
     count: total,
+    frameCount: total,
     singleString: b64,
     frameAt: (i: number) => frames[i % frames.length],
   }

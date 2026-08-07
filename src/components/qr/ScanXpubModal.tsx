@@ -15,7 +15,9 @@ interface Props {
  * crypto-output as well as plain-text key expressions.
  */
 export function ScanXpubModal({ onClose, onScanned }: Props) {
-  const decoderRef = useRef(new XpubScanDecoder())
+  // Lazy init so re-renders during scanning don't allocate throwaway decoders.
+  const decoderRef = useRef<XpubScanDecoder | null>(null)
+  if (!decoderRef.current) decoderRef.current = new XpubScanDecoder()
   const doneRef = useRef(false)
   const [ratio, setRatio] = useState(0)
   const [error, setError] = useState<string | null>(null)
@@ -23,11 +25,12 @@ export function ScanXpubModal({ onClose, onScanned }: Props) {
   const handleScan = useCallback(
     (text: string) => {
       if (doneRef.current) return
-      const advanced = decoderRef.current.receive(text)
-      if (advanced) setRatio(decoderRef.current.progress())
-      if (decoderRef.current.isComplete()) {
+      const decoder = decoderRef.current!
+      const advanced = decoder.receive(text)
+      if (advanced) setRatio(decoder.progress())
+      if (decoder.isComplete()) {
         try {
-          const result = decoderRef.current.getResult()
+          const result = decoder.getResult()
           doneRef.current = true
           onScanned(result)
           onClose()

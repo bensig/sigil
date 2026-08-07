@@ -35,6 +35,13 @@ describe('UR2 crypto-psbt round-trip', () => {
     expect(source.frameAt(0)).toMatch(/^ur:crypto-psbt\//i)
   })
 
+  it('exposes a frameCount >= base fragment count for the animation loop', () => {
+    const source = encodePsbtToUr(LARGE_PSBT_B64, 100)
+    expect(source.count).toBeGreaterThan(1)
+    // UR2 cycles extra fountain frames, so the loop is longer than the base count.
+    expect(source.frameCount).toBeGreaterThanOrEqual(source.count)
+  })
+
   it('recovers from dropped frames (fountain redundancy)', () => {
     const source = encodePsbtToUr(LARGE_PSBT_B64, 100)
     const decoder = new PsbtScanDecoder()
@@ -138,6 +145,15 @@ describe('xpub QR parsing', () => {
     expect(r).not.toBeNull()
     expect(r!.xpub).toBe(xpub)
     expect(r!.xfp).toBeUndefined()
+  })
+
+  it('parses bare SLIP-132 multisig keys (Zpub / Upub / Vpub)', () => {
+    for (const prefix of ['Zpub', 'Upub', 'Vpub', 'ypub', 'zpub']) {
+      const key = prefix + '6CUGRUonZSQ4TWtTMmzXdrXDtypWKiKrhko4egpiMZbpiaQL2jkwSB1icqYh2cfDfVxdx4df189oLKnC5fSwqPfgyP3hooxujYzAu3fDVmz'
+      const r = parseTextXpub(key)
+      expect(r, `should parse ${prefix}`).not.toBeNull()
+      expect(r!.xpub).toBe(key)
+    }
   })
 
   it('returns null for non-xpub text', () => {

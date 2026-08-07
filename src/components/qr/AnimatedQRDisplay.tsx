@@ -21,7 +21,11 @@ export function AnimatedQRDisplay({ source, speedMs = 200, size = 320, paused = 
   const [tick, setTick] = useState(0)
   const [error, setError] = useState<string | null>(null)
 
-  const multi = source.count > 1
+  // Use the animation loop length (frameCount), not the base-fragment count, so
+  // the indicator and progress bar stay in sync with the frame actually shown
+  // (UR2 cycles extra fountain frames beyond `count`).
+  const loop = source.frameCount
+  const multi = loop > 1
 
   // Advance frames on a timer (unless single-frame or paused).
   useEffect(() => {
@@ -54,7 +58,7 @@ export function AnimatedQRDisplay({ source, speedMs = 200, size = 320, paused = 
     )
   }, [source, tick, size])
 
-  const currentPart = multi ? (tick % source.count) + 1 : 1
+  const currentPart = multi ? (tick % loop) + 1 : 1
 
   return (
     <div className="flex flex-col items-center gap-3">
@@ -68,12 +72,12 @@ export function AnimatedQRDisplay({ source, speedMs = 200, size = 320, paused = 
       {multi && !error && (
         <div className="flex items-center gap-3 text-sm text-slate-300">
           <span className="font-medium tabular-nums">
-            Part {currentPart} of {source.count}
+            Part {currentPart} of {loop}
           </span>
           <div className="w-32 h-1.5 bg-slate-700 rounded-full overflow-hidden">
             <div
               className="h-full bg-[var(--color-accent,#3b82f6)] transition-[width] duration-150"
-              style={{ width: `${(currentPart / source.count) * 100}%` }}
+              style={{ width: `${(currentPart / loop) * 100}%` }}
             />
           </div>
         </div>

@@ -34,12 +34,30 @@ export function QRScanner({ onScan, onError, size = 320 }: Props) {
     const canvas = document.createElement('canvas')
     const ctx = canvas.getContext('2d', { willReadFrequently: true })
 
+    // Cap the decode resolution and rate: full-res per-frame getImageData + jsQR
+    // on the main thread is expensive and can drop frames on mobile, which hurts
+    // animated-QR scanning. A downscaled buffer at ~12 Hz is plenty for QR.
+    const MAX_DECODE_DIM = 640
+    const DECODE_INTERVAL_MS = 80
+    let lastDecode = 0
+
     const tick = () => {
+      if (cancelled) return
       const video = videoRef.current
-      if (!cancelled && video && video.readyState === video.HAVE_ENOUGH_DATA && ctx) {
-        const w = video.videoWidth
-        const h = video.videoHeight
-        if (w && h) {
+      const now = typeof performance !== 'undefined' ? performance.now() : 0
+      if (
+        video &&
+        video.readyState === video.HAVE_ENOUGH_DATA &&
+        ctx &&
+        now - lastDecode >= DECODE_INTERVAL_MS
+      ) {
+        lastDecode = now
+        const vw = video.videoWidth
+        const vh = video.videoHeight
+        if (vw && vh) {
+          const scale = Math.min(1, MAX_DECODE_DIM / Math.max(vw, vh))
+          const w = Math.max(1, Math.round(vw * scale))
+          const h = Math.max(1, Math.round(vh * scale))
           canvas.width = w
           canvas.height = h
           ctx.drawImage(video, 0, 0, w, h)
@@ -54,7 +72,7 @@ export function QRScanner({ onScan, onError, size = 320 }: Props) {
           }
         }
       }
-      if (!cancelled) rafRef.current = requestAnimationFrame(tick)
+      rafRef.current = requestAnimationFrame(tick)
     }
 
     async function start() {

@@ -22,7 +22,10 @@ const FORMAT_LABEL: Record<string, string> = {
  * PSBT back to the caller. Auto-detects UR2 / Specter / single-frame Base64.
  */
 export function QRScanModal({ onClose, onScanned }: Props) {
-  const decoderRef = useRef(new PsbtScanDecoder())
+  // Lazy init: useRef's argument is evaluated every render, so `new
+  // PsbtScanDecoder()` would allocate a throwaway on each progress re-render.
+  const decoderRef = useRef<PsbtScanDecoder | null>(null)
+  if (!decoderRef.current) decoderRef.current = new PsbtScanDecoder()
   const doneRef = useRef(false)
   const [progress, setProgress] = useState<ScanProgress>(EMPTY)
   const [error, setError] = useState<string | null>(null)
@@ -30,13 +33,14 @@ export function QRScanModal({ onClose, onScanned }: Props) {
   const handleScan = useCallback(
     (text: string) => {
       if (doneRef.current) return
-      const advanced = decoderRef.current.receive(text)
+      const decoder = decoderRef.current!
+      const advanced = decoder.receive(text)
       if (advanced) {
-        setProgress(decoderRef.current.progress())
+        setProgress(decoder.progress())
       }
-      if (decoderRef.current.isComplete()) {
+      if (decoder.isComplete()) {
         try {
-          const psbt = decoderRef.current.getPsbtBase64()
+          const psbt = decoder.getPsbtBase64()
           doneRef.current = true
           onScanned(psbt)
           onClose()
@@ -48,6 +52,13 @@ export function QRScanModal({ onClose, onScanned }: Props) {
     [onScanned, onClose]
   )
 
+  const retry = useCallback(() => {
+    decoderRef.current = new PsbtScanDecoder()
+    doneRef.current = false
+    setProgress(EMPTY)
+    setError(null)
+  }, [])
+
   const pct = progress.expected
     ? Math.round((progress.received / progress.expected) * 100)
     : Math.round(progress.ratio * 100)
@@ -58,6 +69,9 @@ export function QRScanModal({ onClose, onScanned }: Props) {
         {error ? (
           <div className="bg-red-950/50 border border-red-800 text-red-300 rounded-lg p-4 text-sm">
             {error}
+            <button onClick={retry} className="block mt-2 underline text-red-200">
+              Try again
+            </button>
           </div>
         ) : (
           <QRScanner onScan={handleScan} onError={setError} />

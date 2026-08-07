@@ -24,6 +24,7 @@ export function QRExportModal({ psbt, onClose }: Props) {
   const [speedMs, setSpeedMs] = useState(200)
   const [paused, setPaused] = useState(false)
   const [copied, setCopied] = useState(false)
+  const [copyError, setCopyError] = useState(false)
 
   const source = useMemo(() => {
     try {
@@ -34,9 +35,14 @@ export function QRExportModal({ psbt, onClose }: Props) {
   }, [psbt, format, density])
 
   const copyPsbt = async () => {
-    await navigator.clipboard.writeText(psbt)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 1500)
+    try {
+      await navigator.clipboard.writeText(psbt)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1500)
+    } catch {
+      setCopyError(true)
+      setTimeout(() => setCopyError(false), 2500)
+    }
   }
 
   return (
@@ -122,7 +128,7 @@ export function QRExportModal({ psbt, onClose }: Props) {
             onClick={copyPsbt}
             className="px-3 py-2 rounded-lg border border-slate-700 hover:border-slate-600 text-sm"
           >
-            {copied ? 'Copied!' : 'Copy PSBT'}
+            {copied ? 'Copied!' : copyError ? 'Copy failed' : 'Copy PSBT'}
           </button>
         </div>
       </div>

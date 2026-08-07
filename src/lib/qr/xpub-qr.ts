@@ -79,8 +79,9 @@ export function parseTextXpub(text: string): ScannedXpub | null {
     }
   }
 
-  // Bare xpub / tpub / Zpub etc.
-  const bare = /^([xztuvY][a-km-zA-HJ-NP-Z1-9]{100,120})$/.exec(t)
+  // Bare extended key. Covers BIP32 (xpub/tpub) and SLIP-132 variants for
+  // segwit multisig/single: y/z/u/v (lowercase) and Y/Z/U/V (uppercase multisig).
+  const bare = /^([xyztuvYZUV]pub[a-km-zA-HJ-NP-Z1-9]{100,120})$/.exec(t)
   if (bare) {
     return { xpub: bare[1] }
   }

@@ -17,8 +17,14 @@ export type QRFormat = 'ur2' | 'specter' | 'base64'
  */
 export interface QRFrameSource {
   format: QRFormat
-  /** Number of distinct base frames (fountain sources for UR2). */
+  /** Number of distinct base fragments the payload splits into (UR2 fountain sources). */
   count: number
+  /**
+   * Number of frames in one full animation loop, i.e. `frameAt` is periodic with
+   * this period. Equals `count` for Specter/Base64; for multi-fragment UR2 it is
+   * larger than `count` because extra fountain (redundancy) frames are cycled.
+   */
+  frameCount: number
   /** Full UR string (UR2) or the raw payload — handy for "Copy" actions. */
   singleString: string
   /** Returns the QR text to render for animation tick `i`. */

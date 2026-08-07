@@ -54,6 +54,7 @@ export function encodePsbtFrames(
       return {
         format: 'base64',
         count: 1,
+        frameCount: 1,
         singleString: b64,
         frameAt: () => b64,
       }

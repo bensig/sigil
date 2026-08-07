@@ -42,6 +42,7 @@ export function encodePsbtToUr(psbt: string, maxFragmentLength = 150): QRFrameSo
     return {
       format: 'ur2',
       count: 1,
+      frameCount: 1,
       singleString: only,
       frameAt: () => only,
     }
@@ -58,6 +59,7 @@ export function encodePsbtToUr(psbt: string, maxFragmentLength = 150): QRFrameSo
   return {
     format: 'ur2',
     count,
+    frameCount: parts.length,
     singleString: ur.type + ' (' + count + ' parts)',
     frameAt: (i: number) => parts[i % parts.length],
   }
