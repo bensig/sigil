@@ -1,5 +1,6 @@
 import { useState, useRef, DragEvent } from 'react'
 import { parsePsbt } from '../lib/psbt'
+import { QRScanModal } from './qr/QRScanModal'
 
 interface Props {
   onPsbtLoad: (psbt: string) => void
@@ -10,6 +11,7 @@ export function PSBTImport({ onPsbtLoad, disabled = false }: Props) {
   const [error, setError] = useState<string | null>(null)
   const [isDragging, setIsDragging] = useState(false)
   const [importText, setImportText] = useState('')
+  const [showScan, setShowScan] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const processFileContent = async (file: File): Promise<string | null> => {
@@ -110,12 +112,20 @@ export function PSBTImport({ onPsbtLoad, disabled = false }: Props) {
           <p className="font-medium dark:text-slate-200">Drag & drop PSBT file here</p>
           <p className="text-sm dark:text-slate-400">or click to browse</p>
         </div>
-        <button
-          className="btn-secondary"
-          onClick={() => fileInputRef.current?.click()}
-        >
-          Choose File
-        </button>
+        <div className="flex items-center justify-center gap-2">
+          <button
+            className="btn-secondary"
+            onClick={() => fileInputRef.current?.click()}
+          >
+            Choose File
+          </button>
+          <button
+            className="btn-secondary"
+            onClick={() => { setError(null); setShowScan(true) }}
+          >
+            Scan QR
+          </button>
+        </div>
       </div>
 
       <div className="mt-4">
@@ -135,6 +145,13 @@ export function PSBTImport({ onPsbtLoad, disabled = false }: Props) {
       </div>
 
       {error && <div className="text-xs text-red-600 mt-3">{error}</div>}
+
+      {showScan && (
+        <QRScanModal
+          onClose={() => setShowScan(false)}
+          onScanned={(psbt) => { onPsbtLoad(psbt); setError(null) }}
+        />
+      )}
     </div>
   )
 }
