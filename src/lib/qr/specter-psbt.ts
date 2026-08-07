@@ -9,20 +9,9 @@
 
 import { Buffer } from 'buffer'
 import type { QRFrameSource } from './types'
+import { psbtStringToBase64 } from './detect'
 
 const SPECTER_FRAME_RE = /^p(\d+)of(\d+)\s+([\s\S]+)$/i
-
-/** Normalize a PSBT string to Base64 (Specter transports Base64). */
-function toBase64(psbt: string): string {
-  const trimmed = psbt.trim()
-  if (/^70736274ff/i.test(trimmed)) {
-    return Buffer.from(trimmed, 'hex').toString('base64')
-  }
-  // Validate it is parseable base64 by round-tripping.
-  return Buffer.from(trimmed, 'base64').toString('base64') === trimmed
-    ? trimmed
-    : Buffer.from(trimmed, 'base64').toString('base64')
-}
 
 /**
  * Build a frame source that renders a PSBT as Specter animated Base64 QR.
@@ -31,7 +20,7 @@ function toBase64(psbt: string): string {
  * @param maxChunkLen  Max Base64 characters per frame (density control).
  */
 export function encodePsbtToSpecter(psbt: string, maxChunkLen = 100): QRFrameSource {
-  const b64 = toBase64(psbt)
+  const b64 = psbtStringToBase64(psbt)
   const total = Math.max(1, Math.ceil(b64.length / maxChunkLen))
   const frames: string[] = []
   for (let i = 0; i < total; i++) {

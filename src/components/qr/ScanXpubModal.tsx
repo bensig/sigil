@@ -42,16 +42,20 @@ export function ScanXpubModal({ onClose, onScanned }: Props) {
     [onScanned, onClose]
   )
 
+  const retry = useCallback(() => {
+    decoderRef.current = new XpubScanDecoder()
+    doneRef.current = false
+    setRatio(0)
+    setError(null)
+  }, [])
+
   return (
     <QRModal title="Scan xpub from SeedSigner" onClose={onClose}>
       <div className="space-y-4">
         {error ? (
           <div className="bg-red-950/50 border border-red-800 text-red-300 rounded-lg p-4 text-sm">
             {error}
-            <button
-              onClick={() => { setError(null); decoderRef.current = new XpubScanDecoder() }}
-              className="block mt-2 underline text-red-200"
-            >
+            <button onClick={retry} className="block mt-2 underline text-red-200">
               Try again
             </button>
           </div>

@@ -4,8 +4,8 @@
 // Import: feed scanned frames to PsbtScanDecoder, which auto-detects UR2 /
 // Specter / single-frame Base64 and reassembles the PSBT.
 
-import { Buffer } from 'buffer'
 import type { QRFormat, QRFrameSource, ScanProgress } from './types'
+import { isRawPsbtString, psbtStringToBase64 } from './detect'
 import { encodePsbtToUr, UrPsbtDecoder, isUrString, isUrPsbt } from './ur-psbt'
 import { encodePsbtToSpecter, SpecterPsbtDecoder, isSpecterFrame } from './specter-psbt'
 
@@ -13,15 +13,7 @@ export type { QRFormat, QRFrameSource, ScanProgress, ScannedXpub } from './types
 export { encodePsbtToUr } from './ur-psbt'
 export { encodePsbtToSpecter } from './specter-psbt'
 export { parseXpubQR } from './xpub-qr'
-
-/** Base64 of the PSBT magic bytes "70736274ff" — every base64 PSBT starts with this. */
-const BASE64_PSBT_PREFIX = 'cHNidP8'
-
-/** True if the string is a raw (single-frame) Base64 or hex PSBT, not a QR fragment. */
-export function isRawPsbtString(text: string): boolean {
-  const t = text.trim()
-  return t.startsWith(BASE64_PSBT_PREFIX) || /^70736274ff/i.test(t)
-}
+export { isRawPsbtString } from './detect'
 
 /** Density presets (bytes/chars per fragment) exposed to the export UI. */
 export const DENSITY_PRESETS = {
@@ -48,9 +40,7 @@ export function encodePsbtFrames(
     case 'specter':
       return encodePsbtToSpecter(psbt, preset.specter)
     case 'base64': {
-      const b64 = /^70736274ff/i.test(psbt.trim())
-        ? Buffer.from(psbt.trim(), 'hex').toString('base64')
-        : psbt.trim()
+      const b64 = psbtStringToBase64(psbt)
       return {
         format: 'base64',
         count: 1,
@@ -96,7 +86,7 @@ export class PsbtScanDecoder {
     if (isRawPsbtString(t)) {
       if (this.mode && this.mode !== 'base64') return false
       this.mode = 'base64'
-      const b64 = /^70736274ff/i.test(t) ? Buffer.from(t, 'hex').toString('base64') : t
+      const b64 = psbtStringToBase64(t)
       const isNew = this.base64Result !== b64
       this.base64Result = b64
       return isNew

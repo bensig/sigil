@@ -139,6 +139,14 @@ describe('xpub QR parsing', () => {
     expect(r!.path).toBe("m/48'/0'/0'/2'")
   })
 
+  it('accepts uppercase H hardened markers in bracketed expressions', () => {
+    const text = "[deadbeef/48H/0H/0H/2H]xpub6CUGRUonZSQ4TWtTMmzXdrXDtypWKiKrhko4egpiMZbpiaQL2jkwSB1icqYh2cfDfVxdx4df189oLKnC5fSwqPfgyP3hooxujYzAu3fDVmz"
+    const r = parseTextXpub(text)
+    expect(r).not.toBeNull()
+    expect(r!.path).toBe("m/48'/0'/0'/2'")
+    expect(r!.xfp).toBe('deadbeef')
+  })
+
   it('parses a bare xpub', () => {
     const xpub = 'xpub6CUGRUonZSQ4TWtTMmzXdrXDtypWKiKrhko4egpiMZbpiaQL2jkwSB1icqYh2cfDfVxdx4df189oLKnC5fSwqPfgyP3hooxujYzAu3fDVmz'
     const r = parseTextXpub(xpub)

@@ -1011,7 +1011,7 @@ export function SendForm({
       {showQRScan && (
         <QRScanModal
           onClose={() => setShowQRScan(false)}
-          onScanned={(scanned) => onPsbtChange(scanned)}
+          onScanned={(scanned) => { onPsbtChange(scanned); setError(null) }}
         />
       )}
     </div>

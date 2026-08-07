@@ -70,7 +70,7 @@ export function parseTextXpub(text: string): ScannedXpub | null {
   const t = text.trim()
 
   // [fingerprint/path]xpub...
-  const m = /^\[([0-9a-fA-F]{8})((?:\/\d+['h]?)+)\]\s*([a-zA-Z0-9]+)/.exec(t)
+  const m = /^\[([0-9a-fA-F]{8})((?:\/\d+['hH]?)+)\]\s*([a-zA-Z0-9]+)/.exec(t)
   if (m) {
     return {
       xfp: m[1].toLowerCase(),

@@ -9,16 +9,7 @@ import { Buffer } from 'buffer'
 import { UR, UREncoder, URDecoder } from '@ngraveio/bc-ur'
 import { CryptoPSBT } from '@keystonehq/bc-ur-registry-btc'
 import type { QRFrameSource } from './types'
-
-/** Convert a base64 (or hex) PSBT string to raw bytes. */
-function psbtStringToBytes(psbt: string): Buffer {
-  const trimmed = psbt.trim()
-  // Hex PSBTs start with the magic "70736274ff".
-  if (/^70736274ff/i.test(trimmed)) {
-    return Buffer.from(trimmed, 'hex')
-  }
-  return Buffer.from(trimmed, 'base64')
-}
+import { psbtStringToBytes } from './detect'
 
 /**
  * Build a frame source that renders an unsigned/partial PSBT as animated UR2 QR.
