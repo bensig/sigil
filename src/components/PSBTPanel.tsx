@@ -1,6 +1,8 @@
 import { useState, useRef, useEffect, DragEvent } from 'react'
 import { parsePsbt, getSignatureCount, isFullySigned, finalizePsbt } from '../lib/psbt'
 import { PSBTDetails } from './PSBTDetails'
+import { QRExportModal } from './qr/QRExportModal'
+import { QRScanModal } from './qr/QRScanModal'
 
 interface Props {
   psbt: string | null
@@ -36,6 +38,8 @@ export function PSBTPanel({
   const [signatureCount, setSignatureCount] = useState(0)
   const [fullySignedPsbt, setFullySignedPsbt] = useState(false)
   const [showDetails, setShowDetails] = useState(false)
+  const [showQRExport, setShowQRExport] = useState(false)
+  const [showQRScan, setShowQRScan] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   // Parse PSBT and update signature info when psbt changes
@@ -229,13 +233,19 @@ export function PSBTPanel({
             </button>
           </div>
 
-          {/* Paste option */}
-          <div className="text-center">
+          {/* Paste / scan options */}
+          <div className="text-center space-y-2">
             <button
               onClick={() => setImporting(true)}
-              className="text-sm text-ink/60 hover:text-ink underline"
+              className="text-sm text-ink/60 hover:text-ink underline block w-full"
             >
               Or paste PSBT text
+            </button>
+            <button
+              onClick={() => setShowQRScan(true)}
+              className="text-sm text-ink/60 hover:text-ink underline block w-full"
+            >
+              Or scan QR from signer
             </button>
           </div>
         </div>
@@ -296,6 +306,12 @@ export function PSBTPanel({
             </button>
             <button onClick={handleExport} className="btn-secondary text-sm">
               Export
+            </button>
+            <button onClick={() => setShowQRExport(true)} className="btn-secondary text-sm">
+              Show QR
+            </button>
+            <button onClick={() => setShowQRScan(true)} className="btn-secondary text-sm">
+              Scan QR
             </button>
             <button
               onClick={() => setShowDetails(!showDetails)}
@@ -363,6 +379,16 @@ export function PSBTPanel({
 
       {error && !psbt && (
         <div className="text-red-600 text-sm mt-3">{error}</div>
+      )}
+
+      {showQRExport && psbt && (
+        <QRExportModal psbt={psbt} onClose={() => setShowQRExport(false)} />
+      )}
+      {showQRScan && (
+        <QRScanModal
+          onClose={() => setShowQRScan(false)}
+          onScanned={(scanned) => { onPsbtChange(scanned); setError(null) }}
+        />
       )}
     </div>
   )

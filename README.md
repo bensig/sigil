@@ -8,6 +8,10 @@ A self-hosted, stateless Bitcoin multisig coordinator.
   [Caravan](https://github.com/caravan-bitcoin/caravan) libraries.
 - **Ledger signing over WebUSB**, plus PSBT import/export for airgapped signers
   (Coldcard, SeedSigner, anything that speaks PSBT).
+- **Native animated QR** for fully air-gapped signing with SeedSigner and other
+  camera-based signers — display a PSBT as animated QR and scan the signed result
+  back, no files or extra software. Supports UR2 (`crypto-psbt`), Specter, and
+  single-frame Base64.
 - **Watch-only by design** — configured with xpubs only. Keys never touch the app.
 - Multi-wallet switcher, address labels, recipient whitelist, fee selection with
   live mempool estimates, transaction history.
@@ -74,11 +78,36 @@ multisig, use the BIP48 P2WSH path: `m/48'/0'/0'/2'` on mainnet,
   `ccxp-*.json` from the SD card) — it includes the `p2wsh` xpub for the BIP48
   path and the `xfp`.
 - **SeedSigner / other airgapped devices:** use the device's multisig xpub
-  export (usually shown as a QR containing xpub + fingerprint + path).
+  export (usually shown as a QR containing xpub + fingerprint + path). In Sigil's
+  **Config** tab, use *Scan from SeedSigner* on the signer row to read it directly
+  with your webcam (UR `crypto-account`/`crypto-hdkey` or a plain key expression).
 
 Every cosigner uses the **same path** in a standard setup; the order of the
 `signers` array doesn't matter for address derivation (keys are sorted per
 BIP67), but keep it consistent across coordinators.
+
+## Air-gapped signing via QR
+
+Sigil can round-trip a PSBT with a camera-only signer (e.g. SeedSigner) purely
+over animated QR codes — no SD cards, files, or extra software:
+
+1. Build a transaction (**Send**) or import an existing PSBT.
+2. On the PSBT panel, click **Show QR**. Point your signer's camera at the
+   animated code. Pick the **format** (UR2 is the default and recommended),
+   **density**, and **speed** if the signer struggles to read it.
+3. Sign on the device, then in Sigil click **Scan QR** and hold the signer's
+   animated output up to your webcam. Sigil auto-detects UR2 / Specter / Base64,
+   reassembles the PSBT (recovering dropped frames via fountain codes), and
+   updates the signature status.
+4. Continue with other signers, or broadcast once the quorum is met.
+
+Camera access is only requested when you open a scan dialog, and everything runs
+locally — the QR path needs no network. The existing file import/export and
+Ledger WebUSB flows are unchanged. See
+[docs/qr-seedsigner-spec.md](docs/qr-seedsigner-spec.md) for the full design.
+
+> **Never** scan a SeedQR (seed backup) into Sigil or any online device. Sigil
+> only ever handles public keys and PSBTs.
 
 ## Saving from the UI
 

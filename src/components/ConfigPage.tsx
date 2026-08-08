@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import type { AppConfig } from '../lib/wallet-config'
 import { useWalletContext } from '../lib/wallet-context'
+import { ScanXpubModal } from './qr/ScanXpubModal'
 
 type ApiProvider = 'mempool' | 'blockstream'
 type FallbackSelection = 'auto' | ApiProvider
@@ -53,6 +54,7 @@ export function ConfigPage({ config, onSave, isDev }: Props) {
   const [ledgerExport, setLedgerExport] = useState<{ status: LedgerExportStatus; error: string | null; signerIndex: number | null }>({
     status: 'idle', error: null, signerIndex: null,
   })
+  const [scanSignerIndex, setScanSignerIndex] = useState<number | null>(null)
 
   useEffect(() => {
     const nextProvider = (config.client?.provider ?? 'mempool') as ApiProvider
@@ -121,6 +123,19 @@ export function ConfigPage({ config, onSave, isDev }: Props) {
     setSigners(prev => {
       const updated = [...prev]
       updated[index] = { ...updated[index], [field]: value }
+      return updated
+    })
+  }
+
+  const applyScannedXpub = (index: number, result: { xpub: string; xfp?: string; path?: string }) => {
+    setSigners(prev => {
+      const updated = [...prev]
+      updated[index] = {
+        ...updated[index],
+        xpub: result.xpub,
+        xfp: result.xfp ? result.xfp.toLowerCase() : updated[index].xfp,
+        bip32Path: result.path ?? updated[index].bip32Path,
+      }
       return updated
     })
   }
@@ -326,6 +341,12 @@ export function ConfigPage({ config, onSave, isDev }: Props) {
                   ? 'Connecting to Ledger...'
                   : 'Import from Ledger'}
               </button>
+              <button
+                onClick={() => setScanSignerIndex(index)}
+                className="btn-secondary text-xs py-1.5 px-3 ml-2"
+              >
+                Scan from SeedSigner
+              </button>
               {ledgerExport.signerIndex === index && ledgerExport.status === 'done' && (
                 <span className="text-xs text-green-600 dark:text-green-400 ml-2">
                   xpub and fingerprint imported
@@ -386,6 +407,13 @@ export function ConfigPage({ config, onSave, isDev }: Props) {
           Configuration can only be modified in development mode (npm run dev).
           Changes are saved to src/configs/{walletId}/config.json.
         </p>
+      )}
+
+      {scanSignerIndex !== null && (
+        <ScanXpubModal
+          onClose={() => setScanSignerIndex(null)}
+          onScanned={(result) => applyScannedXpub(scanSignerIndex, result)}
+        />
       )}
     </div>
   )

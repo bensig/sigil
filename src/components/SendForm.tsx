@@ -2,6 +2,8 @@ import { useState, useMemo, useEffect, useCallback } from 'react'
 import { Buffer } from 'buffer'
 import { FeeSelector } from './FeeSelector'
 import { PSBTDetails } from './PSBTDetails'
+import { QRExportModal } from './qr/QRExportModal'
+import { QRScanModal } from './qr/QRScanModal'
 import { UTXOSelector, utxoKey, type EnrichedUTXO, type AddressLabel } from './UTXOSelector'
 import type { FeeRates, FeeLevel } from '../types'
 import { estimateTxSize, scriptToTaprootAddress } from '../lib/psbt'
@@ -101,6 +103,8 @@ export function SendForm({
   const [showSuggestions, setShowSuggestions] = useState(false)
   const [broadcastedTxid, setBroadcastedTxid] = useState<string | null>(null)
   const [showPsbtDetails, setShowPsbtDetails] = useState(false)
+  const [showQRExport, setShowQRExport] = useState(false)
+  const [showQRScan, setShowQRScan] = useState(false)
 
   const amountSats = useMemo(() => {
     try {
@@ -795,6 +799,12 @@ export function SendForm({
               <button className="btn-secondary text-xs" onClick={handleSave}>
                 Save PSBT
               </button>
+              <button className="btn-secondary text-xs" onClick={() => setShowQRExport(true)}>
+                Show QR
+              </button>
+              <button className="btn-secondary text-xs" onClick={() => setShowQRScan(true)}>
+                Scan QR
+              </button>
               <button
                 className={`btn-secondary text-xs ${showPsbtDetails ? 'bg-ink/10 dark:bg-slate-600' : ''}`}
                 onClick={() => setShowPsbtDetails(!showPsbtDetails)}
@@ -993,6 +1003,16 @@ export function SendForm({
             )}
           </div>
         </div>
+      )}
+
+      {showQRExport && psbt && (
+        <QRExportModal psbt={psbt} onClose={() => setShowQRExport(false)} />
+      )}
+      {showQRScan && (
+        <QRScanModal
+          onClose={() => setShowQRScan(false)}
+          onScanned={(scanned) => { onPsbtChange(scanned); setError(null) }}
+        />
       )}
     </div>
   )
