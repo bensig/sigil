@@ -1,7 +1,8 @@
 import { useState, useCallback, useEffect, useMemo } from 'react'
 import type { WalletConfig, AddressInfo, UTXO } from '../types'
 import { generateAddresses } from '../lib/addresses'
-import { scanAddresses, clearUtxoCache, setApiConfig, refreshSingleAddressUtxos, fetchUtxosForAddresses } from '../lib/mempool'
+import { scanAddresses, clearUtxoCache, setApiConfig, refreshSingleAddressUtxos, fetchUtxosForAddresses, getAddressesStats } from '../lib/mempool'
+import { pickNextUnusedIndex, planHistoryProbe } from '../lib/change-policy'
 import { buildWalletConfig } from '../lib/wallet-config'
 import type { AppConfig } from '../lib/wallet-config'
 
@@ -12,7 +13,8 @@ interface WalletState {
   utxos: Map<string, UTXO[]>
   balance: number
   nextReceiveIndex: number
-  nextChangeIndex: number
+  /** Index of the next unused change address; null when exhausted or unknown. */
+  nextChangeIndex: number | null
   loading: boolean
   scanning: boolean
   error: string | null
@@ -22,16 +24,20 @@ interface CachedBalances {
   utxos: Record<string, UTXO[]>
   balance: number
   nextReceiveIndex: number
-  nextChangeIndex: number
+  nextChangeIndex: number | null
   timestamp: number
 }
 
 function getCacheKey(walletId: string) {
-  return `wallet-balances-${walletId}`
+  // v2: nextChangeIndex is now derived from transaction history rather than
+  // UTXO presence, so v1 caches would restore an index that reuses an address.
+  return `wallet-balances-v2-${walletId}`
 }
 
 function loadCachedBalances(walletId: string): CachedBalances | null {
   try {
+    // Drop the superseded v1 entry rather than leaving its UTXO blob behind.
+    localStorage.removeItem(`wallet-balances-${walletId}`)
     const raw = localStorage.getItem(getCacheKey(walletId))
     if (!raw) return null
     return JSON.parse(raw)
@@ -57,7 +63,7 @@ export function useWallet(appConfig: AppConfig, walletId?: string) {
     utxos: new Map(),
     balance: 0,
     nextReceiveIndex: 0,
-    nextChangeIndex: 0,
+    nextChangeIndex: null,
     loading: true,
     scanning: false,
     error: null,
@@ -89,7 +95,7 @@ export function useWallet(appConfig: AppConfig, walletId?: string) {
         })
         // Generate a pool of addresses (we'll scan them smartly)
         const addresses = await generateAddresses(config, 20, config.startingAddressIndex)
-        const changeAddresses = await generateAddresses(config, 10, 0, true)
+        const changeAddresses = await generateAddresses(config, 20, 0, true)
 
         // Restore cached balances if available
         const cached = walletId ? loadCachedBalances(walletId) : null
@@ -147,9 +153,32 @@ export function useWallet(appConfig: AppConfig, walletId?: string) {
       const receiveAddrs = state.addresses.map(a => a.address)
       const { usedAddresses: receiveUsed, nextUnusedIndex: nextReceive } = await scanAddresses(receiveAddrs, 10)
 
-      // Scan change addresses
+      // Scan change addresses for UTXOs (balances)
       const changeAddrs = state.changeAddresses.map(a => a.address)
-      const { usedAddresses: changeUsed, nextUnusedIndex: nextChange } = await scanAddresses(changeAddrs, 10)
+      const { usedAddresses: changeUsed } = await scanAddresses(changeAddrs, 10)
+
+      // Which change address to hand out next is a separate question, and the
+      // UTXO scan answers only half of it: holding a UTXO proves an address has
+      // transacted, but an address used and then fully spent holds nothing and
+      // must still never be reused. So take the funded ones as used for free,
+      // and ask for history only about the empties — a request that stops at
+      // the first address with no transactions. On a wallet whose first change
+      // address has never been used, that is a single request.
+      const probe = planHistoryProbe(state.changeAddresses, changeUsed)
+      const { stats: probedStats, unresolved } = probe.probeAddresses.length > 0
+        ? await getAddressesStats(probe.probeAddresses, 1)
+        : { stats: new Map<string, { txCount: number; balance: number }>(), unresolved: new Set<string>() }
+      probedStats.forEach((value, key) => probe.knownStats.set(key, value))
+
+      const nextUnusedChange = pickNextUnusedIndex(state.changeAddresses, probe.knownStats, unresolved)
+      // A failed lookup ('unknown') is not evidence that an address is free, so
+      // keep whatever was last established instead of advancing onto one that
+      // may already be in use. Exhaustion is null: getNextChangeAddress then
+      // reports it rather than wrapping around to index 0.
+      const nextChange =
+        nextUnusedChange.status === 'found' ? nextUnusedChange.index
+          : nextUnusedChange.status === 'exhausted' ? null
+            : state.nextChangeIndex
 
       // Merge UTXO maps
       const allUtxos = new Map<string, UTXO[]>()
@@ -329,12 +358,14 @@ export function useWallet(appConfig: AppConfig, walletId?: string) {
     return state.addresses[0] || null
   }, [state.addresses, state.nextReceiveIndex])
 
-  // Get next unused change address
+  // Get next unused change address, or null when the branch is exhausted.
+  // Never wraps to index 0: that address has been used and handing it back
+  // would silently reuse it.
   const getNextChangeAddress = useCallback((): AddressInfo | null => {
-    if (state.nextChangeIndex < state.changeAddresses.length) {
-      return state.changeAddresses[state.nextChangeIndex]
-    }
-    return state.changeAddresses[0] || null
+    if (state.nextChangeIndex === null) return null
+    // Matched on the address's own index, not its position in the array: the
+    // two coincide only while the change branch starts at 0.
+    return state.changeAddresses.find(a => a.index === state.nextChangeIndex) ?? null
   }, [state.changeAddresses, state.nextChangeIndex])
 
   // Get all UTXOs with address info

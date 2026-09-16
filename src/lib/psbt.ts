@@ -2,6 +2,7 @@ import type { WalletConfig, UTXO } from '../types'
 import { getMultisigForAddress } from './addresses'
 import { getTransactionHex } from './mempool'
 import { bech32m } from 'bech32'
+import { DUST_THRESHOLD } from './change-policy'
 
 // Lazy-loaded bitcoinjs-lib
 let bitcoinjsLib: typeof import('bitcoinjs-lib') | null = null
@@ -103,7 +104,7 @@ export async function createUnsignedPsbt(params: CreatePsbtParams): Promise<stri
     amountSats,
     feeSats,
     changeAmount,
-    hasChange: changeAmount > 546,
+    hasChange: changeAmount > DUST_THRESHOLD,
   })
   console.log('Config extendedPublicKeys:', config.extendedPublicKeys.map(k => ({
     name: k.name,
@@ -173,7 +174,7 @@ export async function createUnsignedPsbt(params: CreatePsbtParams): Promise<stri
   }
 
   // Add change output if significant (with bip32Derivation and witnessScript for Ledger v2)
-  if (changeAmount > 546) { // Dust threshold
+  if (changeAmount > DUST_THRESHOLD) {
     // Get the multisig for the change address
     // isChangeAddress determines the derivation branch: true = 1 (change), false = 0 (receive)
     const changeMultisig = await getMultisigForAddress(config, changeAddressIndex, isChangeAddress)

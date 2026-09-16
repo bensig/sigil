@@ -9,6 +9,7 @@ import type { FeeRates, FeeLevel } from '../types'
 import { estimateTxSize, scriptToTaprootAddress } from '../lib/psbt'
 import { parsePsbt as parsePsbtHelper } from '../lib/psbt'
 import { useWalletContext } from '../lib/wallet-context'
+import { DEFAULT_CHANGE_POLICY, expectsChangeOutput, resolveChangeDestination, type ChangePolicy } from '../lib/change-policy'
 
 type ChangeAddressOption = 'auto' | 'new' | 'manual' | string // string = specific address
 
@@ -16,6 +17,10 @@ interface Props {
   mode?: 'create' | 'import'
   balance: number
   availableUtxos: EnrichedUTXO[]
+  /** Wallet-level default for where change goes; overridable per transaction. */
+  changePolicy?: ChangePolicy
+  /** Next unused change address, or null when the change branch is exhausted. */
+  nextChangeAddress?: { address: string; index: number; isChange: boolean } | null
   feeRates: FeeRates | null
   loadingFees: boolean
   satsToBtc: (sats: number) => string
@@ -43,6 +48,8 @@ export function SendForm({
   mode = 'create',
   balance,
   availableUtxos,
+  changePolicy = DEFAULT_CHANGE_POLICY,
+  nextChangeAddress = null,
   feeRates,
   loadingFees,
   satsToBtc,
@@ -128,6 +135,13 @@ export function SendForm({
   // Use selected balance if UTXOs are selected, otherwise use total balance
   const effectiveBalance = selectedUtxoKeys.size > 0 ? selectedBalance : balance
 
+  // What this send actually spends. With nothing selected the PSBT spends every
+  // wallet UTXO, so change resolution has to reason about that same set.
+  const spendUtxos = useMemo(
+    () => (selectedUtxoKeys.size > 0 ? selectedUtxos : availableUtxos),
+    [selectedUtxoKeys.size, selectedUtxos, availableUtxos]
+  )
+
   const effectiveFeeRate = useMemo(() => {
     if (feeLevel === 'custom') return customFeeRate
     if (!feeRates) return 0
@@ -188,7 +202,7 @@ export function SendForm({
   const sourceAddresses = useMemo(() => {
     const addressMap = new Map<string, { address: string; total: number; label?: string; isChange: boolean }>()
 
-    selectedUtxos.forEach(utxo => {
+    spendUtxos.forEach(utxo => {
       const existing = addressMap.get(utxo.address)
       const label = addressLabels.find(al => al.address === utxo.address)?.label
       if (existing) {
@@ -205,23 +219,54 @@ export function SendForm({
 
     // Sort by total value descending
     return Array.from(addressMap.values()).sort((a, b) => b.total - a.total)
-  }, [selectedUtxos, addressLabels])
+  }, [spendUtxos, addressLabels])
+
+  // Where the wallet's policy would send change for this set of inputs. Null
+  // when the policy needs a fresh change address and none is left.
+  const policyChange = useMemo(() => {
+    try {
+      return resolveChangeDestination({
+        policy: changePolicy,
+        spendUtxos,
+        nextChange: nextChangeAddress,
+      })
+    } catch {
+      return null
+    }
+  }, [changePolicy, spendUtxos, nextChangeAddress])
 
   // Resolve the actual change address based on selection
   const resolvedChangeAddress = useMemo((): string | null => {
     if (changeAddressOption === 'new') {
-      return null // Let App.tsx use next change address
+      return nextChangeAddress?.address ?? null
     }
     if (changeAddressOption === 'manual') {
       return manualChangeAddress.trim() || null
     }
     if (changeAddressOption === 'auto') {
-      // Default: use source address with largest balance (first in sorted list)
-      return sourceAddresses[0]?.address || null
+      return policyChange?.address ?? null
     }
     // Specific address selected
     return changeAddressOption
-  }, [changeAddressOption, manualChangeAddress, sourceAddresses])
+  }, [changeAddressOption, manualChangeAddress, policyChange, nextChangeAddress])
+
+  // Change returning to a receive-branch address reuses an address that may
+  // have been handed out for deposits, exposing this wallet's history to
+  // whoever holds it. Worth surfacing before the PSBT is built.
+  const changeReusesReceiveAddress =
+    changeAddressOption === 'auto'
+      ? !!policyChange?.reusesReceiveAddress
+      : changeAddressOption !== 'new' && changeAddressOption !== 'manual' &&
+        sourceAddresses.some(sa => sa.address === changeAddressOption && !sa.isChange)
+
+  // Returning change to a change-branch input is milder — no one else holds
+  // that address — but it is still handing the same address out twice.
+  const changeReusesChangeAddress =
+    !changeReusesReceiveAddress &&
+    (changeAddressOption === 'auto'
+      ? !!policyChange?.reusesAddress
+      : changeAddressOption !== 'new' && changeAddressOption !== 'manual' &&
+        sourceAddresses.some(sa => sa.address === changeAddressOption && sa.isChange))
 
   const normalizedRecipient = recipient.trim()
 
@@ -309,6 +354,15 @@ export function SendForm({
       return false
     }
 
+    // Only a transaction that actually produces change needs somewhere to put
+    // it: a sweep must not be blocked by an exhausted change branch.
+    if (!resolvedChangeAddress && expectsChangeOutput(effectiveBalance, amountSats, estimatedFee)) {
+      setError(changeAddressOption === 'manual'
+        ? 'Enter a change address, or choose one from the list'
+        : 'No unused change address available — every change address on this wallet has been used. Choose a change address explicitly.')
+      return false
+    }
+
     // If UTXOs are selected, validate against selected balance
     const balanceToCheck = selectedUtxoKeys.size > 0 ? selectedBalance : balance
     if (amountSats + estimatedFee > balanceToCheck) {
@@ -329,8 +383,9 @@ export function SendForm({
     try {
       // Pass selected UTXOs, or empty array to use auto-selection
       const utxosToSpend = selectedUtxoKeys.size > 0 ? selectedUtxos : []
-      // Pass change address (null means use default new change address)
-      const changeAddr = selectedUtxoKeys.size > 0 ? resolvedChangeAddress : null
+      // The resolved destination applies whether or not UTXOs were selected, so
+      // both paths honour the same policy instead of diverging.
+      const changeAddr = resolvedChangeAddress
       await onCreatePsbt(normalizedRecipient, amountSats, estimatedFee, utxosToSpend, changeAddr)
       setStage('generated')
       setLastDetails({
@@ -648,8 +703,9 @@ export function SendForm({
             )}
           </div>
 
-          {/* Change Address Selector - only show when UTXOs are selected */}
-          {selectedUtxoKeys.size > 0 && (
+          {/* Change Address Selector - the destination applies to every send,
+              selected UTXOs or not, so it is always visible */}
+          {spendUtxos.length > 0 && (
             <div className="space-y-2">
               <label className="text-sm font-medium block">Change Address</label>
               <select
@@ -659,7 +715,9 @@ export function SendForm({
                 disabled={disabled}
               >
                 <option value="auto">
-                  Auto: {sourceAddresses[0]?.label || `${sourceAddresses[0]?.address?.slice(0, 8)}...${sourceAddresses[0]?.address?.slice(-6)}`} (largest source)
+                  {policyChange
+                    ? `Wallet default: ${policyChange.address.slice(0, 8)}...${policyChange.address.slice(-6)}${policyChange.isChange ? ' (fresh change address)' : ' (largest source)'}`
+                    : 'Wallet default'}
                 </option>
                 {sourceAddresses.map(sa => (
                   <option key={sa.address} value={sa.address}>
@@ -685,6 +743,40 @@ export function SendForm({
               {resolvedChangeAddress && changeAddressOption !== 'manual' && (
                 <div className="text-xs text-ink/50 dark:text-slate-400 mono">
                   {resolvedChangeAddress.slice(0, 12)}...{resolvedChangeAddress.slice(-8)}
+                </div>
+              )}
+
+              {changeReusesChangeAddress && (
+                <div className="text-xs text-ink/60 dark:text-slate-400 bg-mist dark:bg-slate-800 border border-ink/10 dark:border-slate-700 rounded p-2 space-y-2">
+                  <div>
+                    Change returns to a change address this transaction already spends, so that
+                    address is used twice.
+                  </div>
+                  <button
+                    type="button"
+                    className="btn-secondary text-xs"
+                    onClick={() => setChangeAddressOption('new')}
+                    disabled={disabled || !nextChangeAddress}
+                  >
+                    Use a fresh change address
+                  </button>
+                </div>
+              )}
+
+              {changeReusesReceiveAddress && (
+                <div className="text-xs text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 border border-amber-100 dark:border-amber-800 rounded p-2 space-y-2">
+                  <div>
+                    Change returns to a receive address. If you have given this address to anyone as
+                    a deposit address, they can see every payment it has ever held.
+                  </div>
+                  <button
+                    type="button"
+                    className="btn-secondary text-xs"
+                    onClick={() => setChangeAddressOption('new')}
+                    disabled={disabled || !nextChangeAddress}
+                  >
+                    Use a fresh change address
+                  </button>
                 </div>
               )}
             </div>

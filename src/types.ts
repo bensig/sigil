@@ -1,5 +1,8 @@
+import type { ChangePolicy } from './lib/change-policy'
+
 export interface WalletConfig {
   name: string
+  changePolicy: ChangePolicy
   uuid: string
   addressType: 'P2WSH'
   network: 'mainnet' | 'testnet'

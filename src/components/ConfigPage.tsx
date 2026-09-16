@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import type { AppConfig } from '../lib/wallet-config'
+import { DEFAULT_CHANGE_POLICY, type ChangePolicy } from '../lib/change-policy'
 import { useWalletContext } from '../lib/wallet-context'
 import { ScanXpubModal } from './qr/ScanXpubModal'
 
@@ -44,6 +45,7 @@ export function ConfigPage({ config, onSave, isDev }: Props) {
       : 'auto'
 
   const [walletName, setWalletName] = useState(config.walletName)
+  const [changePolicy, setChangePolicy] = useState<ChangePolicy>(config.changePolicy ?? DEFAULT_CHANGE_POLICY)
   const [signers, setSigners] = useState<SignerConfig[]>(config.signers)
   const [provider, setProvider] = useState<ApiProvider>(initialProvider)
   const [apiBaseUrl, setApiBaseUrl] = useState(config.client?.apiBaseUrl ?? '')
@@ -149,6 +151,7 @@ export function ConfigPage({ config, onSave, isDev }: Props) {
       await onSave({
         ...config,
         walletName,
+        changePolicy,
         client: {
           provider,
           apiBaseUrl: apiBaseUrl.trim() || undefined,
@@ -172,6 +175,7 @@ export function ConfigPage({ config, onSave, isDev }: Props) {
   const resolvedFallbackProvider = resolveFallbackProvider(fallbackProvider, provider)
   const hasChanges =
     walletName !== config.walletName ||
+    changePolicy !== (config.changePolicy ?? DEFAULT_CHANGE_POLICY) ||
     provider !== configProvider ||
     apiBaseUrl.trim() !== (config.client?.apiBaseUrl ?? '') ||
     resolvedFallbackProvider !== config.client?.fallbackProvider ||
@@ -227,6 +231,24 @@ export function ConfigPage({ config, onSave, isDev }: Props) {
             <div className="bg-mist dark:bg-slate-700 rounded px-3 py-2 text-sm dark:text-slate-300">
               {config.quorum.requiredSigners} of {config.quorum.totalSigners} signatures required
             </div>
+          </div>
+
+          <div className="pt-2">
+            <label className="text-sm font-medium block mb-1 dark:text-slate-200">Change Address</label>
+            <select
+              value={changePolicy}
+              onChange={(e) => setChangePolicy(e.target.value as ChangePolicy)}
+              className="w-full"
+            >
+              <option value="source">Return to the input address holding the most</option>
+              <option value="new">Use a fresh change address</option>
+            </select>
+            <p className="text-xs text-ink/50 dark:text-slate-400 mt-1">
+              Returning change to an input address keeps funds on addresses you already track, but
+              reuses them: change becomes obvious on-chain, and anyone holding that address can see
+              everything it ever held. A fresh change address avoids both. Either way you can
+              override the destination per transaction on the Send tab.
+            </p>
           </div>
 
           <div className="pt-2">

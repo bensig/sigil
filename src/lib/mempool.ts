@@ -689,8 +689,11 @@ export async function getAddressStats(address: string): Promise<{ txCount: numbe
 export async function getAddressesStats(
   addresses: string[],
   gapLimit = 1
-): Promise<Map<string, { txCount: number; balance: number }>> {
+): Promise<{ stats: Map<string, { txCount: number; balance: number }>; unresolved: Set<string> }> {
   const stats = new Map<string, { txCount: number; balance: number }>()
+  // Addresses whose history could not be fetched. Reported separately so
+  // callers never mistake a failed lookup for an address with no transactions.
+  const unresolved = new Set<string>()
   let consecutiveUnused = 0
 
   for (const address of addresses) {
@@ -721,7 +724,7 @@ export async function getAddressesStats(
       }
     } catch (e) {
       console.warn(`Failed to fetch stats for ${address}:`, e)
-      stats.set(address, { txCount: 0, balance: 0 })
+      unresolved.add(address)
       consecutiveUnused++
       if (consecutiveUnused >= gapLimit) {
         break
@@ -729,5 +732,5 @@ export async function getAddressesStats(
     }
   }
 
-  return stats
+  return { stats, unresolved }
 }

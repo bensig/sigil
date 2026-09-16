@@ -442,7 +442,18 @@ export function PSBTDetails({ psbtBase64 }: PSBTDetailsProps) {
             <div className="flex items-center gap-2">
               <span className="font-medium dark:text-slate-200">Output {i}</span>
               {output.isChange && (
-                <span className="text-xs bg-amber-100 dark:bg-amber-900/50 text-amber-800 dark:text-amber-300 px-1.5 py-0.5 rounded">change</span>
+                <>
+                  <span className="text-xs bg-amber-100 dark:bg-amber-900/50 text-amber-800 dark:text-amber-300 px-1.5 py-0.5 rounded">change</span>
+                  {/* Change destination visible before signing, without expanding */}
+                  {output.address && (
+                    <span className="mono text-xs text-ink/50 dark:text-slate-400">
+                      {output.address.slice(0, 10)}…{output.address.slice(-6)}
+                      {output.bip32Derivation?.[0] && (
+                        <span className="ml-2">{output.bip32Derivation[0].path}</span>
+                      )}
+                    </span>
+                  )}
+                </>
               )}
             </div>
             <div className="flex items-center gap-2">
