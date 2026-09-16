@@ -19,6 +19,8 @@ import { WalletProvider, useWalletContext } from './lib/wallet-context'
 import { WalletSwitcher } from './components/WalletSwitcher'
 import { FirstRunSetup } from './components/FirstRunSetup'
 import { getWalletRegistry } from './lib/wallet-loader'
+import type { WalletRegistryEntry } from './lib/wallet-loader'
+import { matchPsbtToWallets } from './lib/psbt-wallet-match'
 
 // Check if we're in dev mode
 const isDev = import.meta.env.DEV
@@ -38,7 +40,7 @@ function App() {
 }
 
 function AppContent() {
-  const { walletId, config, switchWallet, wallets } = useWalletContext()
+  const { walletId, walletEntry, config, switchWallet, wallets } = useWalletContext()
 
   // Build signer configs from context config
   const signerConfigs = useMemo(() => {
@@ -74,6 +76,45 @@ function AppContent() {
   const [refreshingStats, setRefreshingStats] = useState(false)
   const [isDraggingFile, setIsDraggingFile] = useState(false)
   const [, setDragCounter] = useState(0)
+  // null = imported PSBT matches the active wallet (or nothing imported);
+  // array = wallets the imported PSBT actually belongs to ([] = none on this device)
+  const [psbtWalletMismatch, setPsbtWalletMismatch] = useState<WalletRegistryEntry[] | null>(null)
+
+  // Import entry point for external PSBTs: check which wallet they belong to,
+  // so signing doesn't fail later with Caravan's cryptic
+  // "Signing key details not included in PSBT" when the wrong wallet is active.
+  const handleImportedPsbt = useCallback(async (psbtData: string) => {
+    setPsbt(psbtData)
+    try {
+      const matches = await matchPsbtToWallets(psbtData)
+      setPsbtWalletMismatch(matches.some(m => m.id === walletId) ? null : matches)
+    } catch {
+      setPsbtWalletMismatch(null)
+    }
+  }, [walletId])
+
+  // Clear the mismatch warning whenever the PSBT is cleared
+  useEffect(() => {
+    if (!psbt) setPsbtWalletMismatch(null)
+  }, [psbt])
+
+  // Switching wallets remounts AppContent and drops all state, so stash the
+  // PSBT in sessionStorage across the switch and restore it here.
+  useEffect(() => {
+    const pending = sessionStorage.getItem('pending-import-psbt')
+    if (pending) {
+      sessionStorage.removeItem('pending-import-psbt')
+      handleImportedPsbt(pending)
+      setActiveTab('send')
+      setSendMode('import')
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const switchWalletWithPsbt = useCallback((targetWalletId: string) => {
+    if (psbt) sessionStorage.setItem('pending-import-psbt', psbt)
+    switchWallet(targetWalletId)
+  }, [psbt, switchWallet])
 
   // Global file drop handler for PSBT import
   const handleGlobalDragEnter = useCallback((e: DragEvent<HTMLDivElement>) => {
@@ -113,7 +154,7 @@ function AppContent() {
     const text = await file.text()
     try {
       await parsePsbt(text.trim())
-      setPsbt(text.trim())
+      await handleImportedPsbt(text.trim())
       setActiveTab('send')
       setSendMode('import')
       return
@@ -127,13 +168,13 @@ function AppContent() {
     const base64 = btoa(binary)
     try {
       await parsePsbt(base64)
-      setPsbt(base64)
+      await handleImportedPsbt(base64)
       setActiveTab('send')
       setSendMode('import')
     } catch {
       // Not a valid PSBT
     }
-  }, [])
+  }, [handleImportedPsbt])
 
   // Auto-detect which signer is connected
   const connectedSigner = ledger.identifySigner(signerConfigs)
@@ -279,6 +320,11 @@ function AppContent() {
   const handleSign = useCallback(async () => {
     if (!psbt) throw new Error('No PSBT to sign')
     if (!connectedSigner) throw new Error('Connect your Ledger first')
+    if (psbtWalletMismatch !== null) {
+      throw new Error(psbtWalletMismatch.length > 0
+        ? `This PSBT belongs to the ${psbtWalletMismatch.map(w => w.name).join(' / ')} wallet — switch wallets before signing`
+        : 'This PSBT does not match any wallet on this device')
+    }
 
     // Find the config for the connected signer
     const signerEntry = signerConfigs.find(s => s.name === connectedSigner)
@@ -297,7 +343,7 @@ function AppContent() {
     console.log(`Signing as ${connectedSigner} with key:`, keyInfo)
     const signedPsbt = await ledger.signPsbt(psbt, signerEntry.config, keyInfo)
     setPsbt(signedPsbt)
-  }, [psbt, connectedSigner, ledger])
+  }, [psbt, connectedSigner, ledger, psbtWalletMismatch])
 
   // Wrap ledger.connect with bip32Path from active config
   const handleLedgerConnect = useCallback(() => {
@@ -453,6 +499,25 @@ function AppContent() {
 
             {activeTab === 'send' && (
               <div>
+                {psbt && psbtWalletMismatch !== null && (
+                  <div className="mb-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded p-3 space-y-2">
+                    <div className="text-sm text-amber-800 dark:text-amber-300 font-medium">
+                      {psbtWalletMismatch.length > 0
+                        ? `This PSBT belongs to the ${psbtWalletMismatch.map(w => w.name).join(' / ')} wallet, not ${walletEntry.name}.`
+                        : 'This PSBT does not match any wallet on this device — signing here will fail.'}
+                    </div>
+                    {psbtWalletMismatch.map(w => (
+                      <button
+                        key={w.id}
+                        type="button"
+                        className="btn-primary text-sm px-4 py-2"
+                        onClick={() => switchWalletWithPsbt(w.id)}
+                      >
+                        Switch to {w.name} and continue
+                      </button>
+                    ))}
+                  </div>
+                )}
                 {sendMode === 'import' && !psbt && (
                   <div className="mb-4 relative">
                     <button
@@ -464,7 +529,7 @@ function AppContent() {
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                       </svg>
                     </button>
-                    <PSBTImport onPsbtLoad={setPsbt} />
+                    <PSBTImport onPsbtLoad={handleImportedPsbt} />
                   </div>
                 )}
 
