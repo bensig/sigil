@@ -10,7 +10,7 @@ interface Props {
 }
 
 const FEE_INFO: Record<Exclude<FeeLevel, 'custom'>, { label: string; time: string }> = {
-  rapid: { label: 'Rapid', time: '~10 min' },
+  rapid: { label: 'Fast', time: '~10 min' },
   normal: { label: 'Normal', time: '~30 min' },
   slow: { label: 'Slow', time: '~1 hr' },
 }
