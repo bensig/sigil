@@ -1,8 +1,11 @@
 import type { WalletConfig } from '../types'
+import { DEFAULT_CHANGE_POLICY, type ChangePolicy } from './change-policy'
 
 export interface AppConfig {
   walletName: string
   network: 'mainnet' | 'testnet'
+  /** Where change goes. Omitted in existing configs; see DEFAULT_CHANGE_POLICY. */
+  changePolicy?: ChangePolicy
   client?: {
     provider?: 'mempool' | 'blockstream'
     apiBaseUrl?: string
@@ -32,6 +35,7 @@ export function buildWalletConfig(config: AppConfig, signerIndex: number): Walle
       fallbackApiBaseUrl,
     },
     quorum: config.quorum,
+    changePolicy: config.changePolicy ?? DEFAULT_CHANGE_POLICY,
     extendedPublicKeys: config.signers.map((signer, idx) => ({
       name: signer.name,
       bip32Path: signer.bip32Path,

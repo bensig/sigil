@@ -1,7 +1,8 @@
 import { useState, useCallback, useEffect, useMemo } from 'react'
 import type { WalletConfig, AddressInfo, UTXO } from '../types'
 import { generateAddresses } from '../lib/addresses'
-import { scanAddresses, clearUtxoCache, setApiConfig, refreshSingleAddressUtxos, fetchUtxosForAddresses } from '../lib/mempool'
+import { scanAddresses, clearUtxoCache, setApiConfig, refreshSingleAddressUtxos, fetchUtxosForAddresses, getAddressesStats } from '../lib/mempool'
+import { pickNextUnusedIndex } from '../lib/change-policy'
 import { buildWalletConfig } from '../lib/wallet-config'
 import type { AppConfig } from '../lib/wallet-config'
 
@@ -27,7 +28,9 @@ interface CachedBalances {
 }
 
 function getCacheKey(walletId: string) {
-  return `wallet-balances-${walletId}`
+  // v2: nextChangeIndex is now derived from transaction history rather than
+  // UTXO presence, so v1 caches would restore an index that reuses an address.
+  return `wallet-balances-v2-${walletId}`
 }
 
 function loadCachedBalances(walletId: string): CachedBalances | null {
@@ -89,7 +92,7 @@ export function useWallet(appConfig: AppConfig, walletId?: string) {
         })
         // Generate a pool of addresses (we'll scan them smartly)
         const addresses = await generateAddresses(config, 20, config.startingAddressIndex)
-        const changeAddresses = await generateAddresses(config, 10, 0, true)
+        const changeAddresses = await generateAddresses(config, 20, 0, true)
 
         // Restore cached balances if available
         const cached = walletId ? loadCachedBalances(walletId) : null
@@ -147,9 +150,19 @@ export function useWallet(appConfig: AppConfig, walletId?: string) {
       const receiveAddrs = state.addresses.map(a => a.address)
       const { usedAddresses: receiveUsed, nextUnusedIndex: nextReceive } = await scanAddresses(receiveAddrs, 10)
 
-      // Scan change addresses
+      // Scan change addresses for UTXOs (balances)
       const changeAddrs = state.changeAddresses.map(a => a.address)
-      const { usedAddresses: changeUsed, nextUnusedIndex: nextChange } = await scanAddresses(changeAddrs, 10)
+      const { usedAddresses: changeUsed } = await scanAddresses(changeAddrs, 10)
+
+      // Which change address to hand out next is a separate question, and UTXOs
+      // can't answer it: an address used and then fully spent holds nothing yet
+      // must never be reused. Ask for transaction history instead, stopping at
+      // the first address that has none.
+      const changeStats = await getAddressesStats(changeAddrs, 1)
+      const nextUnusedChange = pickNextUnusedIndex(state.changeAddresses, changeStats)
+      // Past the end = exhausted, which getNextChangeAddress reports as null
+      // rather than wrapping around to an address already in use.
+      const nextChange = nextUnusedChange ?? state.changeAddresses.length
 
       // Merge UTXO maps
       const allUtxos = new Map<string, UTXO[]>()
@@ -329,12 +342,14 @@ export function useWallet(appConfig: AppConfig, walletId?: string) {
     return state.addresses[0] || null
   }, [state.addresses, state.nextReceiveIndex])
 
-  // Get next unused change address
+  // Get next unused change address, or null when the branch is exhausted.
+  // Never wraps to index 0: that address has been used and handing it back
+  // would silently reuse it.
   const getNextChangeAddress = useCallback((): AddressInfo | null => {
     if (state.nextChangeIndex < state.changeAddresses.length) {
       return state.changeAddresses[state.nextChangeIndex]
     }
-    return state.changeAddresses[0] || null
+    return null
   }, [state.changeAddresses, state.nextChangeIndex])
 
   // Get all UTXOs with address info

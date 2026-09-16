@@ -12,6 +12,7 @@ import { useAddressLabels } from './hooks/useAddressLabels'
 import { useWhitelist } from './hooks/useWhitelist'
 import { useTheme } from './hooks/useTheme'
 import { createUnsignedPsbt, getSignerNames, parsePsbt } from './lib/psbt'
+import { expectsChangeOutput, resolveChangeDestination } from './lib/change-policy'
 import { getAddressesStats, getAddressStats } from './lib/mempool'
 import { buildWalletConfig } from './lib/wallet-config'
 import type { AppConfig } from './lib/wallet-config'
@@ -147,8 +148,9 @@ function AppContent() {
       const receiveAddresses = addressLabels.addresses.filter(a => !a.isChange)
       const receiveStats = await getAddressesStats(receiveAddresses.map(a => a.address), 1)
 
-      // Change addresses: scan all since we want to surface any transacted change address,
-      // regardless of gaps (we only generate 10 change addresses)
+      // Change addresses: scan the whole branch, so every transacted change
+      // address is surfaced regardless of gaps, and so the next unused one can
+      // be identified from transaction history rather than UTXO presence.
       const changeAddresses = addressLabels.addresses.filter(a => a.isChange)
       const changeStats = changeAddresses.length > 0
         ? await getAddressesStats(changeAddresses.map(a => a.address), changeAddresses.length)
@@ -213,6 +215,13 @@ function AppContent() {
   // Get all UTXOs for the selector
   const availableUtxos = useMemo(() => wallet.getAllUtxos(), [wallet])
 
+  // Next unused change address, in the shape the change-policy helpers expect.
+  // Anything from the change branch is change by definition.
+  const nextChangeAddress = useMemo(() => {
+    const next = wallet.getNextChangeAddress()
+    return next ? { address: next.address, index: next.index, isChange: true } : null
+  }, [wallet])
+
   // Combine address labels for SendForm
   const addressLabelsForForm = useMemo(() => {
     return addressLabels.addresses.map(a => ({
@@ -254,12 +263,32 @@ function AppContent() {
         throw new Error('Change address must be a wallet address (receive or change)')
       }
     } else {
-      // Use next change address (default behavior)
+      // No explicit choice: fall back to the wallet's change policy, which
+      // refuses to reuse a used address when the change branch is exhausted —
+      // except where no change output is built at all.
       const nextChange = wallet.getNextChangeAddress()
-      if (!nextChange) throw new Error('No change address available')
-      changeAddress = nextChange.address
-      changeAddressIndex = nextChange.index
-      isChangeAddressActuallyChange = true
+      const nextChangeCandidate = nextChange
+        ? { address: nextChange.address, index: nextChange.index, isChange: true }
+        : null
+      const totalInput = utxosToSpend.reduce((sum, u) => sum + u.value, 0)
+
+      if (!expectsChangeOutput(totalInput, amountSats, feeSats)) {
+        // Sweep, or change below dust: no change output is built, so these
+        // values are never derived and no change address needs to exist.
+        const unused = nextChangeCandidate ?? wallet.changeAddresses[0]
+        changeAddress = unused?.address ?? ''
+        changeAddressIndex = unused?.index ?? 0
+        isChangeAddressActuallyChange = true
+      } else {
+        const destination = resolveChangeDestination({
+          policy: wallet.config.changePolicy,
+          spendUtxos: utxosToSpend,
+          nextChange: nextChangeCandidate,
+        })
+        changeAddress = destination.address
+        changeAddressIndex = destination.index
+        isChangeAddressActuallyChange = destination.isChange
+      }
     }
 
     const psbtBase64 = await createUnsignedPsbt({
@@ -509,6 +538,8 @@ function AppContent() {
                       mode="create"
                       balance={wallet.balance}
                       availableUtxos={availableUtxos}
+                      changePolicy={wallet.config.changePolicy}
+                      nextChangeAddress={nextChangeAddress}
                       feeRates={mempool.feeRates}
                       loadingFees={mempool.loadingFees}
                       satsToBtc={mempool.satsToBtc}
