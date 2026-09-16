@@ -73,6 +73,7 @@ function AppContent() {
   const [hideBalance, setHideBalance] = useState(false)
   const [addressStats, setAddressStats] = useState<Map<string, { txCount: number; balance: number }>>(new Map())
   const [refreshingStats, setRefreshingStats] = useState(false)
+  const [unresolvedAddresses, setUnresolvedAddresses] = useState<Set<string>>(new Set())
   const [isDraggingFile, setIsDraggingFile] = useState(false)
   const [, setDragCounter] = useState(0)
 
@@ -146,19 +147,22 @@ function AppContent() {
     try {
       // Receive addresses: stop early at gap limit
       const receiveAddresses = addressLabels.addresses.filter(a => !a.isChange)
-      const receiveStats = await getAddressesStats(receiveAddresses.map(a => a.address), 1)
+      const { stats: receiveStats } = await getAddressesStats(receiveAddresses.map(a => a.address), 1)
 
       // Change addresses: scan the whole branch, so every transacted change
       // address is surfaced regardless of gaps, and so the next unused one can
       // be identified from transaction history rather than UTXO presence.
       const changeAddresses = addressLabels.addresses.filter(a => a.isChange)
-      const changeStats = changeAddresses.length > 0
+      const changeResult = changeAddresses.length > 0
         ? await getAddressesStats(changeAddresses.map(a => a.address), changeAddresses.length)
-        : new Map()
+        : { stats: new Map<string, { txCount: number; balance: number }>(), unresolved: new Set<string>() }
 
       const combinedStats = new Map(receiveStats)
-      changeStats.forEach((value, key) => combinedStats.set(key, value))
+      changeResult.stats.forEach((value, key) => combinedStats.set(key, value))
       setAddressStats(combinedStats)
+      // Tracked so the Receive tab can tell "no transactions" from "couldn't
+      // check", and not label a used address as the next change address.
+      setUnresolvedAddresses(changeResult.unresolved)
     } catch (e) {
       console.error('Failed to fetch address stats:', e)
     } finally {
@@ -174,6 +178,13 @@ function AppContent() {
       setAddressStats(prev => {
         const next = new Map(prev)
         next.set(address, stats)
+        return next
+      })
+      // This address is now resolved, whatever happened on the last sweep.
+      setUnresolvedAddresses(prev => {
+        if (!prev.has(address)) return prev
+        const next = new Set(prev)
+        next.delete(address)
         return next
       })
     } catch (e) {
@@ -569,6 +580,7 @@ function AppContent() {
               <ReceiveAddresses
                 addresses={addressLabels.addresses}
                 addressStats={addressStats}
+                unresolvedAddresses={unresolvedAddresses}
                 setLabel={addressLabels.setLabel}
                 satsToBtc={mempool.satsToBtc}
                 satsToUsd={mempool.satsToUsd}

@@ -5,6 +5,9 @@ import { pickNextUnusedIndex } from '../lib/change-policy'
 interface Props {
   addresses: CachedAddress[]
   addressStats: Map<string, { txCount: number; balance: number }>
+  /** Addresses whose history could not be fetched, so "no transactions" can't
+   *  be inferred from a missing stats entry. */
+  unresolvedAddresses?: ReadonlySet<string>
   setLabel: (address: string, label: string) => void
   satsToBtc: (sats: number) => string
   satsToUsd: (sats: number) => string | null
@@ -17,6 +20,7 @@ interface Props {
 export function ReceiveAddresses({
   addresses,
   addressStats,
+  unresolvedAddresses,
   setLabel,
   satsToBtc,
   satsToUsd,
@@ -79,7 +83,10 @@ export function ReceiveAddresses({
   // Where change from the next send lands, when the wallet is set to use a
   // fresh address. Showing it here means the destination is never a surprise
   // discovered only after the transaction has gone out.
-  const nextChangeIndex = pickNextUnusedIndex(allChangeAddresses, addressStats)
+  // Only claim to know the next one when the history actually came back; a
+  // failed lookup must not decorate a used address as the next change address.
+  const nextUnused = pickNextUnusedIndex(allChangeAddresses, addressStats, unresolvedAddresses)
+  const nextChangeIndex = nextUnused.status === 'found' ? nextUnused.index : null
   const changeAddresses = allChangeAddresses.filter(a => {
     const txCount = addressStats.get(a.address)?.txCount || 0
     return txCount > 0 || a.index === nextChangeIndex
@@ -108,11 +115,11 @@ export function ReceiveAddresses({
       >
         {isChange && (
           <span className={`absolute top-2 right-2 text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ${
-            !isUsed && addr.index === nextChangeIndex
+            !isUsed && nextChangeIndex !== null && addr.index === nextChangeIndex
               ? 'bg-blue-200 text-blue-800 dark:bg-blue-800 dark:text-blue-100'
               : 'bg-amber-200 text-amber-800 dark:bg-amber-800 dark:text-amber-100'
           }`}>
-            {!isUsed && addr.index === nextChangeIndex ? 'Next change' : 'Change'}
+            {!isUsed && nextChangeIndex !== null && addr.index === nextChangeIndex ? 'Next change' : 'Change'}
           </span>
         )}
         {/* Address row */}

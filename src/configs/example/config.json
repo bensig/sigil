@@ -1,7 +1,7 @@
 {
   "walletName": "Example 2-of-3 (testnet)",
   "network": "testnet",
-  "changePolicy": "source",
+  "changePolicy": "new",
   "client": {
     "provider": "mempool",
     "apiBaseUrl": "",

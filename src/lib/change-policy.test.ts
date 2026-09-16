@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest'
-import { DUST_THRESHOLD, expectsChangeOutput, pickNextUnusedIndex, resolveChangeDestination } from './change-policy'
+import {
+  DEFAULT_CHANGE_POLICY,
+  DUST_THRESHOLD,
+  expectsChangeOutput,
+  pickNextUnusedIndex,
+  resolveChangeDestination,
+} from './change-policy'
 
 const addr = (index: number, prefix = 'chg') => ({ address: `${prefix}${index}`, index })
 
@@ -10,17 +16,26 @@ function stats(entries: Record<string, { txCount: number; balance: number }>) {
 const utxo = (address: string, value: number, isChange: boolean, addressIndex = 0) =>
   ({ address, value, isChange, addressIndex })
 
+// An existing config has no changePolicy field. Defaulting those to 'source'
+// would change behaviour under people's feet on upgrade: a plain send that
+// used to get a fresh change address would start reusing an input address.
+describe('DEFAULT_CHANGE_POLICY', () => {
+  it("is 'new', so an unconfigured wallet keeps the safer behaviour", () => {
+    expect(DEFAULT_CHANGE_POLICY).toBe('new')
+  })
+})
+
 describe('pickNextUnusedIndex', () => {
   const addresses = [addr(0), addr(1), addr(2)]
 
   it('returns the first index on a fresh wallet', () => {
-    expect(pickNextUnusedIndex(addresses, stats({}))).toBe(0)
+    expect(pickNextUnusedIndex(addresses, stats({}))).toEqual({ status: 'found', index: 0 })
   })
 
   it('skips an address that currently holds funds', () => {
     expect(pickNextUnusedIndex(addresses, stats({
       chg0: { txCount: 2, balance: 50_000 },
-    }))).toBe(1)
+    }))).toEqual({ status: 'found', index: 1 })
   })
 
   // The bug this function exists to fix: judging "unused" by UTXO presence
@@ -29,7 +44,7 @@ describe('pickNextUnusedIndex', () => {
     expect(pickNextUnusedIndex(addresses, stats({
       chg0: { txCount: 2, balance: 0 },
       chg1: { txCount: 4, balance: 0 },
-    }))).toBe(2)
+    }))).toEqual({ status: 'found', index: 2 })
   })
 
   it('treats an address with no stats entry as unused', () => {
@@ -37,19 +52,46 @@ describe('pickNextUnusedIndex', () => {
     // addresses are simply absent from the map.
     expect(pickNextUnusedIndex(addresses, stats({
       chg0: { txCount: 1, balance: 0 },
-    }))).toBe(1)
+    }))).toEqual({ status: 'found', index: 1 })
   })
 
-  it('returns null when every address has been used', () => {
+  it('reports exhaustion when every address has been used', () => {
     expect(pickNextUnusedIndex(addresses, stats({
       chg0: { txCount: 1, balance: 0 },
       chg1: { txCount: 1, balance: 0 },
       chg2: { txCount: 1, balance: 10 },
-    }))).toBeNull()
+    }))).toEqual({ status: 'exhausted' })
   })
 
-  it('returns null for an empty address list', () => {
-    expect(pickNextUnusedIndex([], stats({}))).toBeNull()
+  it('reports exhaustion for an empty address list', () => {
+    expect(pickNextUnusedIndex([], stats({}))).toEqual({ status: 'exhausted' })
+  })
+
+  // A lookup that failed is not evidence of an unused address. Treating it as
+  // one reinstates exactly the reuse this function exists to prevent: a single
+  // rate-limited request on index 0 would otherwise make the branch look fresh.
+  describe('when history could not be determined', () => {
+    it('is unknown rather than unused', () => {
+      expect(pickNextUnusedIndex(addresses, stats({}), new Set(['chg0'])))
+        .toEqual({ status: 'unknown' })
+    })
+
+    it('is unknown when the failure precedes an apparently free address', () => {
+      expect(pickNextUnusedIndex(addresses, stats({
+        chg1: { txCount: 0, balance: 0 },
+      }), new Set(['chg0']))).toEqual({ status: 'unknown' })
+    })
+
+    it('ignores failures after a usable address has been found', () => {
+      expect(pickNextUnusedIndex(addresses, stats({}), new Set(['chg2'])))
+        .toEqual({ status: 'found', index: 0 })
+    })
+
+    it('is unknown when a used prefix is followed by a failure', () => {
+      expect(pickNextUnusedIndex(addresses, stats({
+        chg0: { txCount: 3, balance: 0 },
+      }), new Set(['chg1']))).toEqual({ status: 'unknown' })
+    })
   })
 })
 
@@ -91,7 +133,7 @@ describe('resolveChangeDestination', () => {
       expect(result.reusesReceiveAddress).toBe(true)
     })
 
-    it('does not flag reuse when the winning address is on the change branch', () => {
+    it('does not flag receive-address reuse when the winner is on the change branch', () => {
       const result = resolveChangeDestination({
         policy: 'source',
         spendUtxos: [utxo('chg3', 10_000, true, 3)],
@@ -99,6 +141,27 @@ describe('resolveChangeDestination', () => {
       })
       expect(result.reusesReceiveAddress).toBe(false)
       expect(result.isChange).toBe(true)
+    })
+
+    // Returning change to a change-branch input is still reuse. It leaks less
+    // than reusing a deposit address, but "never handed out twice" has to mean
+    // it, so it is reported separately rather than not at all.
+    it('still reports reuse when returning to a used change address', () => {
+      const result = resolveChangeDestination({
+        policy: 'source',
+        spendUtxos: [utxo('chg3', 10_000, true, 3)],
+        nextChange,
+      })
+      expect(result.reusesAddress).toBe(true)
+    })
+
+    it('reports reuse when returning to a receive address', () => {
+      const result = resolveChangeDestination({
+        policy: 'source',
+        spendUtxos: [utxo('rcv1', 10_000, false, 1)],
+        nextChange,
+      })
+      expect(result.reusesAddress).toBe(true)
     })
 
     it('breaks ties deterministically by address', () => {
@@ -130,7 +193,13 @@ describe('resolveChangeDestination', () => {
         spendUtxos: [utxo('rcv1', 10_000, false, 1)],
         nextChange,
       })
-      expect(result).toEqual({ address: 'chg7', index: 7, isChange: true, reusesReceiveAddress: false })
+      expect(result).toEqual({
+        address: 'chg7',
+        index: 7,
+        isChange: true,
+        reusesReceiveAddress: false,
+        reusesAddress: false,
+      })
     })
 
     it('throws when the change addresses are exhausted', () => {

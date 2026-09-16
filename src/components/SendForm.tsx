@@ -255,6 +255,15 @@ export function SendForm({
       : changeAddressOption !== 'new' && changeAddressOption !== 'manual' &&
         sourceAddresses.some(sa => sa.address === changeAddressOption && !sa.isChange)
 
+  // Returning change to a change-branch input is milder — no one else holds
+  // that address — but it is still handing the same address out twice.
+  const changeReusesChangeAddress =
+    !changeReusesReceiveAddress &&
+    (changeAddressOption === 'auto'
+      ? !!policyChange?.reusesAddress
+      : changeAddressOption !== 'new' && changeAddressOption !== 'manual' &&
+        sourceAddresses.some(sa => sa.address === changeAddressOption && sa.isChange))
+
   const normalizedRecipient = recipient.trim()
 
   const shorten = (value: string, head: number, tail: number) => {
@@ -771,6 +780,23 @@ export function SendForm({
               {resolvedChangeAddress && changeAddressOption !== 'manual' && (
                 <div className="text-xs text-ink/50 dark:text-slate-400 mono">
                   {resolvedChangeAddress.slice(0, 12)}...{resolvedChangeAddress.slice(-8)}
+                </div>
+              )}
+
+              {changeReusesChangeAddress && (
+                <div className="text-xs text-ink/60 dark:text-slate-400 bg-mist dark:bg-slate-800 border border-ink/10 dark:border-slate-700 rounded p-2 space-y-2">
+                  <div>
+                    Change returns to a change address this transaction already spends, so that
+                    address is used twice.
+                  </div>
+                  <button
+                    type="button"
+                    className="btn-secondary text-xs"
+                    onClick={() => setChangeAddressOption('new')}
+                    disabled={disabled || !nextChangeAddress}
+                  >
+                    Use a fresh change address
+                  </button>
                 </div>
               )}
 

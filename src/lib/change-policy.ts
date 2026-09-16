@@ -9,7 +9,9 @@
 // 'new' sends change to the next unused address on the change branch.
 export type ChangePolicy = 'source' | 'new'
 
-export const DEFAULT_CHANGE_POLICY: ChangePolicy = 'source'
+// Existing configs carry no changePolicy. They default to 'new' so upgrading
+// never silently starts reusing addresses on wallets that weren't asked.
+export const DEFAULT_CHANGE_POLICY: ChangePolicy = 'new'
 
 /** Below this, a change output costs more to spend than it is worth, so the
  *  remainder goes to the miner instead. Applied by the PSBT builder. */
@@ -44,7 +46,23 @@ export interface ChangeDestination extends ChangeAddressCandidate {
   /** True when change lands on a receive-branch address, which may have been
    *  handed to someone else as a deposit address. */
   reusesReceiveAddress: boolean
+  /** True whenever change lands on an address already being spent, on either
+   *  branch. Reusing a change address leaks less than reusing a deposit
+   *  address, but it is still reuse. */
+  reusesAddress: boolean
 }
+
+/**
+ * Outcome of looking for the next unused address on a branch.
+ *
+ * 'unknown' is distinct from 'exhausted' on purpose: a lookup that failed is
+ * not evidence that an address is free, and treating it as one would hand out
+ * an address that is already in use.
+ */
+export type NextUnusedIndex =
+  | { status: 'found'; index: number }
+  | { status: 'exhausted' }
+  | { status: 'unknown' }
 
 /**
  * First address on a branch that has never appeared in a transaction.
@@ -53,18 +71,23 @@ export interface ChangeDestination extends ChangeAddressCandidate {
  * and then fully spent holds nothing, yet handing it out again would reuse it.
  * Addresses missing from `stats` are unused — `getAddressesStats` stops
  * scanning once it passes the gap limit, so trailing entries are simply absent.
- *
- * Returns null when every address has been used.
+ * Addresses in `unresolved` are different: their history could not be fetched,
+ * so nothing can be concluded about them or about any address behind them.
  */
 export function pickNextUnusedIndex(
   addresses: Array<{ address: string; index: number }>,
-  stats: Map<string, { txCount: number; balance: number }>
-): number | null {
+  stats: Map<string, { txCount: number; balance: number }>,
+  unresolved?: ReadonlySet<string>
+): NextUnusedIndex {
   for (const addr of addresses) {
+    // A failure here hides whether this address is free, and every later
+    // candidate sits behind it, so the answer is unknown rather than a guess.
+    if (unresolved?.has(addr.address)) return { status: 'unknown' }
+
     const txCount = stats.get(addr.address)?.txCount ?? 0
-    if (txCount === 0) return addr.index
+    if (txCount === 0) return { status: 'found', index: addr.index }
   }
-  return null
+  return { status: 'exhausted' }
 }
 
 /**
@@ -111,6 +134,9 @@ export function resolveChangeDestination({
       index: winner.index,
       isChange: winner.isChange,
       reusesReceiveAddress: !winner.isChange,
+      // The winner is by definition an address being spent in this same
+      // transaction, so this is reuse whichever branch it sits on.
+      reusesAddress: true,
     }
   }
 
@@ -126,5 +152,6 @@ export function resolveChangeDestination({
     index: nextChange.index,
     isChange: nextChange.isChange,
     reusesReceiveAddress: !nextChange.isChange,
+    reusesAddress: false,
   }
 }

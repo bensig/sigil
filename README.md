@@ -41,7 +41,7 @@ npm start
 {
   "walletName": "My Wallet",
   "network": "mainnet",            // or "testnet"
-  "changePolicy": "source",        // where change goes: "source" | "new" (default: "source")
+  "changePolicy": "new",           // where change goes: "new" | "source" (default: "new")
   "client": {
     "provider": "mempool",          // primary API: "mempool" | "blockstream"
     "apiBaseUrl": "",               // optional self-hosted instance URL
@@ -61,10 +61,11 @@ npm start
 ```
 
 `changePolicy` decides where change goes when you don't pick a destination
-yourself. `"source"` returns it to the input address holding the most, keeping
-funds on addresses you already track; the cost is address reuse — change becomes
-obvious on-chain, and anyone holding that address can see everything it ever
-held. `"new"` sends change to the next unused address on the change branch.
+yourself. `"new"`, the default, sends change to the next unused address on the
+change branch. `"source"` returns it to the input address holding the most,
+keeping funds on addresses you already track; the cost is address reuse — change
+becomes obvious on-chain, and anyone holding that address can see everything it
+ever held.
 Either way the Send tab shows the destination before you sign and lets you
 override it per transaction, and a change address is never handed out twice.
 
