@@ -69,14 +69,15 @@ export function SendForm({
   const requiredSigners = walletConfig.quorum.requiredSigners
   const [recipient, setRecipient] = useState('')
   const [amount, setAmount] = useState('')
-  const [feeLevel, setFeeLevel] = useState<FeeLevel>('normal')
+  const [isMaxMode, setIsMaxMode] = useState(false)
+  const [feeLevel, setFeeLevel] = useState<FeeLevel>('rapid')
   const [customFeeRate, setCustomFeeRate] = useState<number>(0)
 
-  // Seed the custom rate with the current "normal" rate the first time fees load,
+  // Seed the custom rate with the current "rapid" rate the first time fees load,
   // so the field has a sensible starting point if the user picks Custom.
   useEffect(() => {
     if (feeRates && customFeeRate === 0) {
-      setCustomFeeRate(feeRates.normal)
+      setCustomFeeRate(feeRates.rapid)
     }
   }, [feeRates, customFeeRate])
   const [selectedUtxoKeys, setSelectedUtxoKeys] = useState<Set<string>>(new Set())
@@ -135,11 +136,14 @@ export function SendForm({
 
   const estimatedFee = useMemo(() => {
     if (effectiveFeeRate <= 0) return 0
-    // Use number of selected UTXOs for input count, or 1 if none selected
-    const inputCount = selectedUtxoKeys.size > 0 ? selectedUtxoKeys.size : 1
-    const vsize = estimateTxSize(inputCount, 2)
+    // The PSBT spends the selected UTXOs, or ALL wallet UTXOs when none are
+    // selected — the input count must mirror that or the fee (and therefore
+    // the real fee rate) is wildly underestimated on multi-UTXO wallets.
+    const inputCount = selectedUtxoKeys.size > 0 ? selectedUtxoKeys.size : Math.max(availableUtxos.length, 1)
+    const outputCount = isMaxMode ? 1 : 2 // a sweep has no change output
+    const vsize = estimateTxSize(inputCount, outputCount)
     return Math.ceil(vsize * effectiveFeeRate)
-  }, [effectiveFeeRate, selectedUtxoKeys.size])
+  }, [effectiveFeeRate, selectedUtxoKeys.size, availableUtxos.length, isMaxMode])
 
   // Create a lookup map for address labels
   const labelMap = useMemo(() => {
@@ -281,25 +285,18 @@ export function SendForm({
     })()
   }, [psbt])
 
-  const [isMaxMode, setIsMaxMode] = useState(false)
-
-  const setMax = () => {
-    const maxAmount = effectiveBalance - estimatedFee
-    if (maxAmount > 0) {
-      setAmount(satsToBtc(maxAmount))
-      setIsMaxMode(true)
-    }
-  }
-
-  // Auto-update amount when fee changes and user has selected max
+  // Max/sweep mode: the amount is derived, not typed. It re-derives whenever
+  // the fee rate, UTXO selection, or balance changes — never silently stale.
   useEffect(() => {
-    if (isMaxMode && estimatedFee > 0) {
-      const maxAmount = effectiveBalance - estimatedFee
-      if (maxAmount > 0) {
-        setAmount(satsToBtc(maxAmount))
-      }
-    }
-  }, [estimatedFee, isMaxMode, effectiveBalance, satsToBtc])
+    if (!isMaxMode) return
+    const maxAmount = effectiveBalance - estimatedFee
+    setAmount(maxAmount > 0 ? satsToBtc(maxAmount) : '')
+  }, [isMaxMode, estimatedFee, effectiveBalance, satsToBtc])
+
+  // Exact-amount mode: the amount never changes on its own, so warn live when
+  // a fee-rate or UTXO change means amount + fee no longer fits the balance.
+  const exactAmountShortfall = !isMaxMode && amountSats > 0 && estimatedFee > 0 &&
+    amountSats + estimatedFee > effectiveBalance
 
   const validateInputs = () => {
     if (!normalizedRecipient) {
@@ -610,40 +607,6 @@ export function SendForm({
             )}
           </div>
 
-          <div>
-            <label className="text-sm font-medium block mb-1 dark:text-slate-200">Amount (BTC)</label>
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={amount}
-                onChange={(e) => { setAmount(e.target.value); setIsMaxMode(false) }}
-                placeholder="0.00000000"
-                className="mono flex-1"
-                disabled={disabled}
-              />
-              <button
-                type="button"
-                onClick={setMax}
-                className="btn-secondary text-xs"
-                disabled={disabled}
-              >
-                MAX
-              </button>
-            </div>
-            <div className="text-xs text-ink/50 dark:text-slate-400 mt-1 flex justify-between">
-              <span>
-                Available: {satsToBtc(effectiveBalance)} BTC
-                {satsToUsd(effectiveBalance) && <span className="ml-1">(${satsToUsd(effectiveBalance)})</span>}
-                {selectedUtxoKeys.size > 0 && (
-                  <span className="ml-1 text-green-600 dark:text-green-400">({selectedUtxoKeys.size} UTXO{selectedUtxoKeys.size !== 1 ? 's' : ''} selected)</span>
-                )}
-              </span>
-              {amountSats > 0 && satsToUsd(amountSats) && (
-                <span className="font-medium text-ink dark:text-slate-200">${satsToUsd(amountSats)} USD</span>
-              )}
-            </div>
-          </div>
-
           {/* UTXO Selector */}
           <div>
             <button
@@ -735,6 +698,56 @@ export function SendForm({
             onCustomRateChange={setCustomFeeRate}
             loading={loadingFees}
           />
+
+          <div>
+            <label className="text-sm font-medium block mb-1 dark:text-slate-200">Amount (BTC)</label>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={amount}
+                onChange={(e) => { setAmount(e.target.value); setIsMaxMode(false) }}
+                placeholder="0.00000000"
+                className="mono flex-1"
+                disabled={disabled}
+              />
+              <button
+                type="button"
+                onClick={() => setIsMaxMode(!isMaxMode)}
+                className={`text-xs px-3 rounded border transition-colors ${
+                  isMaxMode
+                    ? 'bg-green-600 border-green-600 text-white font-semibold'
+                    : 'btn-secondary'
+                }`}
+                disabled={disabled}
+                title={isMaxMode ? 'Sweeping all available funds — amount tracks fee rate' : 'Send all available funds'}
+              >
+                MAX
+              </button>
+            </div>
+            <div className="text-xs text-ink/50 dark:text-slate-400 mt-1 flex justify-between">
+              <span>
+                Available: {satsToBtc(effectiveBalance)} BTC
+                {satsToUsd(effectiveBalance) && <span className="ml-1">(${satsToUsd(effectiveBalance)})</span>}
+                {selectedUtxoKeys.size > 0 && (
+                  <span className="ml-1 text-green-600 dark:text-green-400">({selectedUtxoKeys.size} UTXO{selectedUtxoKeys.size !== 1 ? 's' : ''} selected)</span>
+                )}
+              </span>
+              {amountSats > 0 && satsToUsd(amountSats) && (
+                <span className="font-medium text-ink dark:text-slate-200">${satsToUsd(amountSats)} USD</span>
+              )}
+            </div>
+            {isMaxMode && (
+              <div className="text-xs text-green-700 dark:text-green-400 mt-1">
+                Sweeping {selectedUtxoKeys.size > 0 ? 'selected UTXOs' : 'all funds'} — amount auto-adjusts when the fee rate or UTXO selection changes.
+              </div>
+            )}
+            {exactAmountShortfall && (
+              <div className="text-xs text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 border border-amber-100 dark:border-amber-800 rounded p-2 mt-2">
+                This amount plus the fee at {effectiveFeeRate} sat/vB ({estimatedFee.toLocaleString()} sats) exceeds the available balance.
+                Lower the amount, choose a slower fee, add UTXOs, or use MAX to sweep.
+              </div>
+            )}
+          </div>
 
           <div className="pt-2 border-t border-ink/10 dark:border-slate-700">
             <div className="flex justify-between text-sm">
