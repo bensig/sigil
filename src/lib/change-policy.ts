@@ -90,6 +90,48 @@ export function pickNextUnusedIndex(
   return { status: 'exhausted' }
 }
 
+export interface HistoryProbePlan {
+  /** What the UTXO scan already established, no API request needed. */
+  knownStats: Map<string, { txCount: number; balance: number }>
+  /** Addresses whose history still has to be fetched, in branch order. */
+  probeAddresses: string[]
+}
+
+/**
+ * Split a branch into what the UTXO scan already proved and what still has to
+ * be asked about.
+ *
+ * Holding a UTXO proves an address has transacted, so those need no history
+ * request. The reverse doesn't hold — an address used and fully spent holds
+ * nothing — so empty addresses still have to be probed. Skipping the funded
+ * ones keeps the request count down, which matters because every extra request
+ * is another chance to be rate limited, and a rate-limited lookup is what
+ * forces the next-index search to answer 'unknown'.
+ */
+export function planHistoryProbe(
+  addresses: Array<{ address: string; index: number }>,
+  utxosByAddress: Map<string, Array<{ value: number }>>
+): HistoryProbePlan {
+  const knownStats = new Map<string, { txCount: number; balance: number }>()
+  const probeAddresses: string[] = []
+
+  for (const addr of addresses) {
+    const utxos = utxosByAddress.get(addr.address)
+    if (utxos && utxos.length > 0) {
+      // txCount 1 is a floor rather than a count: it only has to be non-zero
+      // to mark the address used. The balance is exact.
+      knownStats.set(addr.address, {
+        txCount: 1,
+        balance: utxos.reduce((sum, u) => sum + u.value, 0),
+      })
+      continue
+    }
+    probeAddresses.push(addr.address)
+  }
+
+  return { knownStats, probeAddresses }
+}
+
 /**
  * Decide where change goes for one transaction.
  *

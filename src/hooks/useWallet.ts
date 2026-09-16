@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect, useMemo } from 'react'
 import type { WalletConfig, AddressInfo, UTXO } from '../types'
 import { generateAddresses } from '../lib/addresses'
 import { scanAddresses, clearUtxoCache, setApiConfig, refreshSingleAddressUtxos, fetchUtxosForAddresses, getAddressesStats } from '../lib/mempool'
-import { pickNextUnusedIndex } from '../lib/change-policy'
+import { pickNextUnusedIndex, planHistoryProbe } from '../lib/change-policy'
 import { buildWalletConfig } from '../lib/wallet-config'
 import type { AppConfig } from '../lib/wallet-config'
 
@@ -157,12 +157,20 @@ export function useWallet(appConfig: AppConfig, walletId?: string) {
       const changeAddrs = state.changeAddresses.map(a => a.address)
       const { usedAddresses: changeUsed } = await scanAddresses(changeAddrs, 10)
 
-      // Which change address to hand out next is a separate question, and UTXOs
-      // can't answer it: an address used and then fully spent holds nothing yet
-      // must never be reused. Ask for transaction history instead, stopping at
-      // the first address that has none.
-      const { stats: changeStats, unresolved } = await getAddressesStats(changeAddrs, 1)
-      const nextUnusedChange = pickNextUnusedIndex(state.changeAddresses, changeStats, unresolved)
+      // Which change address to hand out next is a separate question, and the
+      // UTXO scan answers only half of it: holding a UTXO proves an address has
+      // transacted, but an address used and then fully spent holds nothing and
+      // must still never be reused. So take the funded ones as used for free,
+      // and ask for history only about the empties — a request that stops at
+      // the first address with no transactions. On a wallet whose first change
+      // address has never been used, that is a single request.
+      const probe = planHistoryProbe(state.changeAddresses, changeUsed)
+      const { stats: probedStats, unresolved } = probe.probeAddresses.length > 0
+        ? await getAddressesStats(probe.probeAddresses, 1)
+        : { stats: new Map<string, { txCount: number; balance: number }>(), unresolved: new Set<string>() }
+      probedStats.forEach((value, key) => probe.knownStats.set(key, value))
+
+      const nextUnusedChange = pickNextUnusedIndex(state.changeAddresses, probe.knownStats, unresolved)
       // A failed lookup ('unknown') is not evidence that an address is free, so
       // keep whatever was last established instead of advancing onto one that
       // may already be in use. Exhaustion is null: getNextChangeAddress then

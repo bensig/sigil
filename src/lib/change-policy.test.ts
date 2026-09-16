@@ -4,6 +4,7 @@ import {
   DUST_THRESHOLD,
   expectsChangeOutput,
   pickNextUnusedIndex,
+  planHistoryProbe,
   resolveChangeDestination,
 } from './change-policy'
 
@@ -15,6 +16,55 @@ function stats(entries: Record<string, { txCount: number; balance: number }>) {
 
 const utxo = (address: string, value: number, isChange: boolean, addressIndex = 0) =>
   ({ address, value, isChange, addressIndex })
+
+// Holding a UTXO proves an address has transacted, and the balance scan has
+// already established that. Asking the API about those addresses again is a
+// wasted request — and every extra request is another chance to be rate
+// limited, which is what forces the next-index search into 'unknown'.
+describe('planHistoryProbe', () => {
+  const addresses = [addr(0), addr(1), addr(2), addr(3)]
+  const utxos = (byAddress: Record<string, number[]>) =>
+    new Map(Object.entries(byAddress).map(([a, values]) => [a, values.map(value => ({ value }))]))
+
+  it('marks addresses holding UTXOs as used without probing them', () => {
+    const plan = planHistoryProbe(addresses, utxos({ chg0: [5_000], chg1: [1_000, 2_000] }))
+    expect(plan.knownStats.get('chg0')).toEqual({ txCount: 1, balance: 5_000 })
+    expect(plan.knownStats.get('chg1')).toEqual({ txCount: 1, balance: 3_000 })
+    expect(plan.probeAddresses).not.toContain('chg0')
+    expect(plan.probeAddresses).not.toContain('chg1')
+  })
+
+  it('probes from the first address with no UTXOs', () => {
+    const plan = planHistoryProbe(addresses, utxos({ chg0: [5_000] }))
+    expect(plan.probeAddresses).toEqual(['chg1', 'chg2', 'chg3'])
+  })
+
+  it('probes everything on a wallet whose change branch holds nothing', () => {
+    const plan = planHistoryProbe(addresses, utxos({}))
+    expect(plan.probeAddresses).toEqual(['chg0', 'chg1', 'chg2', 'chg3'])
+  })
+
+  it('skips funded addresses that sit after an empty one', () => {
+    // chg2 is funded, so its history is already known; probing it would be a
+    // request spent to learn something the UTXO scan just proved.
+    const plan = planHistoryProbe(addresses, utxos({ chg0: [5_000], chg2: [7_000] }))
+    expect(plan.probeAddresses).toEqual(['chg1', 'chg3'])
+  })
+
+  it('probes nothing when every address is funded', () => {
+    const plan = planHistoryProbe(addresses, utxos({
+      chg0: [1], chg1: [1], chg2: [1], chg3: [1],
+    }))
+    expect(plan.probeAddresses).toEqual([])
+  })
+
+  it('feeds the next-index search so a funded prefix is skipped without probing', () => {
+    const plan = planHistoryProbe(addresses, utxos({ chg0: [5_000] }))
+    // chg1 came back with no transactions; chg0 is used on UTXO evidence alone.
+    plan.knownStats.set('chg1', { txCount: 0, balance: 0 })
+    expect(pickNextUnusedIndex(addresses, plan.knownStats)).toEqual({ status: 'found', index: 1 })
+  })
+})
 
 // An existing config has no changePolicy field. Defaulting those to 'source'
 // would change behaviour under people's feet on upgrade: a plain send that
