@@ -18,7 +18,7 @@ A self-hosted, stateless Bitcoin multisig coordinator.
 - No server, no accounts, no telemetry. A static bundle plus a local API proxy.
 
 <p align="center">
-  <img src="docs/screenshots/r-receive.jpg" alt="Receive tab — derived addresses with balances, labels and derivation paths" width="820">
+  <img src="docs/screenshots/s-receive.png" alt="Receive tab — derived addresses with balances, labels and derivation paths" width="820">
 </p>
 
 <sub>Screens throughout are a demo wallet on throwaway keys with fabricated
@@ -45,7 +45,7 @@ npm start
 ## Wallet config schema
 
 <p align="center">
-  <img src="docs/screenshots/r-config.jpg" alt="Config tab — wallet name, network, quorum, change-address policy and API provider" width="820">
+  <img src="docs/screenshots/s-config-cropped.png" alt="Config tab — wallet name, network, quorum, change-address policy and API provider" width="820">
 </p>
 
 The Config tab edits the same values the JSON below defines.
@@ -141,7 +141,7 @@ Ledger WebUSB flows are unchanged. See
 ## Saving from the UI
 
 <p align="center">
-  <img src="docs/screenshots/r-psbt-detail.jpg" alt="PSBT panel — base64, destination, amount, fee and fee rate, with Copy, Save PSBT, Show QR and Scan QR actions" width="820">
+  <img src="docs/screenshots/s-send-utxo.png" alt="Send tab with the UTXO selector open — individual UTXOs grouped by address, one selected, with the resulting change address and fee rate" width="820">
 </p>
 
 

@@ -1,55 +1,54 @@
 # Sigil screenshots — demo wallet
 
 Product screenshots taken against a throwaway demo wallet. **Nothing here touches
-a real wallet, a real key, or a real balance**, and no SYF/Xavior configuration is
-present in this clone.
+a real wallet, a real key, or a real balance.**
 
 ## What the numbers are
 
-The balances, fee rates and BTC price are **fabricated**. They are served by a
-local mock of the mempool.space API, not fetched from the network. They are
-illustrative of the UI and must never be presented as the fund's holdings.
+The balances, fee rates and BTC price are **fabricated**, served by a local mock
+of the mempool.space API rather than fetched from the network. They illustrate
+the UI and must never be presented as anyone's holdings.
 
 - Wallet: `Demo 2-of-3`, mainnet, 2-of-3 P2WSH
-- Signers: three freshly generated xpubs (Alpha / Bravo / Charlie), private keys
-  discarded at generation — the wallet is unspendable by anyone
+- Signers: three freshly generated xpubs whose private keys were discarded at
+  generation — the wallet is unspendable by anyone
 - Total shown: 9.66672100 BTC at a fabricated $87,031/BTC
 - Fee rates: 14 / 9 / 5 sat/vB
 
 ## The shots
 
-| File | Screen |
-|---|---|
-| `01-send.jpg` | Send tab, empty form — balance, fee tiers, change-address selector |
-| `02-receive.jpg` | Receive tab — funded and unused addresses with derivation paths |
-| `03-config.jpg` | Config tab — wallet settings, quorum, change-address policy |
-| `04-send-filled.jpg` | Send tab with recipient and amount entered |
-| `05-psbt-created.jpg` | After Generate PSBT — "Connect your Ledger to sign" |
-| `06-psbt-detail.jpg` | PSBT panel — base64, destination, amount, fee, QR actions |
-| `07-qr-seedsigner.jpg` | Animated QR export for air-gapped signing — UR2, 23 parts, density and speed controls |
+Captured at a narrow viewport so the app's centred card fills the frame. A wide
+desktop capture leaves the card occupying ~27% of the image, which renders as an
+unreadable sliver once scaled to a page column — don't capture that way.
 
-Two blemishes to fix before publishing:
+| File | Screen | Used in |
+|---|---|---|
+| `s-send.png` | Send tab — balance, recipient, change-address selector, fee rates | bitcoinsigil.com |
+| `s-receive.png` | Receive tab — funded and unused addresses with derivation paths | README intro |
+| `s-config.png` | Config tab, full | — |
+| `s-config-cropped.png` | Config tab, cropped above the mock API URL row | README config schema |
+| `s-send-utxo.png` | Send tab with the UTXO selector open, one UTXO selected | README |
+| `r-qr.jpg` | Animated QR export — UR2, 23 parts | README air-gapped signing |
+| `07-qr-seedsigner.jpg` | The uncropped QR capture `r-qr.jpg` came from | — |
 
-- `03-config.jpg` shows `http://localhost:8899` in "Custom API Base URL", which
-  advertises the mock. Crop that row, or retake with the field blank (which
-  would send the app to the real mempool.space).
-- `07-qr-seedsigner.jpg` has its "Scan with SeedSigner" modal header clipped at
-  the top. The modal is taller than the capture viewport; resizing the browser
-  window did not change the captured height. Retake with a screenshot tool that
-  captures the full page, or crop to the QR and controls.
+`s-config.png` shows `http://localhost:8899` in "Custom API Base URL" and the
+blockstream backup provider row; `s-config-cropped.png` cuts above both, and is
+the one to use publicly.
+
+`r-qr.jpg` is from an earlier wide capture and is cropped to the modal body
+because its header rendered taller than the capture viewport. It's the one
+remaining old-generation image — retake it at a narrow viewport when convenient.
 
 ## Reproducing
 
-Three pieces, in this order:
-
 ```bash
-# 1. the mock chain API (serves curated balances for this wallet's addresses)
+# 1. mock chain API — serves curated balances for this wallet's addresses
 node demo-chain-api.js 8899
 
-# 2. the dev server, from this clone
+# 2. dev server
 npx vite --port 5175 --strictPort
 
-# 3. open http://localhost:5175/
+# 3. open http://localhost:5175/ in a narrow window (~620px wide)
 ```
 
 The mock derives the demo wallet's own addresses at startup and assigns each a
@@ -66,11 +65,11 @@ while these were being made:
 2. **Both provider legs must point at the mock.** `scanAddresses` splits work
    across two providers, sending odd-indexed addresses to the fallback. Setting
    only `apiBaseUrl` leaves the fallback pointed at the real blockstream proxy,
-   which silently returns empty for these addresses — one address in every pair
-   vanishes from the balance. The demo config sets `fallbackApiBaseUrl` to the
-   same mock for this reason.
+   which returns empty for these addresses — one address in every pair vanishes
+   from the balance. The demo config sets `fallbackApiBaseUrl` to the same mock.
 
 ## Not committed
 
-These images and the demo wallet config are deliberately untracked. Decide
-explicitly before adding any of it to the repo.
+The demo wallet config (`src/configs/demo/`, `src/configs/wallets.json`) is
+deliberately untracked — committing it would put a fake wallet in every
+checkout.
