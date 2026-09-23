@@ -17,6 +17,13 @@ A self-hosted, stateless Bitcoin multisig coordinator.
   live mempool estimates, transaction history.
 - No server, no accounts, no telemetry. A static bundle plus a local API proxy.
 
+<p align="center">
+  <img src="docs/screenshots/r-receive.jpg" alt="Receive tab — derived addresses with balances, labels and derivation paths" width="820">
+</p>
+
+<sub>Screens throughout are a demo wallet on throwaway keys with fabricated
+balances — see [docs/screenshots](docs/screenshots/).</sub>
+
 ## Quick start
 
 ```bash
@@ -36,6 +43,13 @@ npm start
 `npm run dev` runs the Vite dev server with HMR for development.
 
 ## Wallet config schema
+
+<p align="center">
+  <img src="docs/screenshots/r-config.jpg" alt="Config tab — wallet name, network, quorum, change-address policy and API provider" width="820">
+</p>
+
+The Config tab edits the same values the JSON below defines.
+
 
 ```jsonc
 {
@@ -98,6 +112,11 @@ BIP67), but keep it consistent across coordinators.
 
 ## Air-gapped signing via QR
 
+<p align="center">
+  <img src="docs/screenshots/r-qr.jpg" alt="Animated QR export — UR2 crypto-psbt streaming 23 parts, with format, density and speed controls" width="300">
+</p>
+
+
 Sigil can round-trip a PSBT with a camera-only signer (e.g. SeedSigner) purely
 over animated QR codes — no SD cards, files, or extra software:
 
@@ -120,6 +139,11 @@ Ledger WebUSB flows are unchanged. See
 > only ever handles public keys and PSBTs.
 
 ## Saving from the UI
+
+<p align="center">
+  <img src="docs/screenshots/r-psbt-detail.jpg" alt="PSBT panel — base64, destination, amount, fee and fee rate, with Copy, Save PSBT, Show QR and Scan QR actions" width="820">
+</p>
+
 
 Address labels, the recipient whitelist, and config edits made in the UI are
 written back to `src/configs/` and `src/data/` by the local server. This works

@@ -117,6 +117,25 @@
   .btn-ghost { background: transparent; color: var(--ink); }
   .btn-ghost:hover { background: var(--ink); color: var(--paper); }
 
+  /* ---------- screenshot ---------- */
+  .shot {
+    border-top: 1px solid var(--hairline);
+    padding: 56px 0 0;
+  }
+  .shot figure { margin: 0; }
+  .shot img {
+    display: block;
+    width: 100%;
+    height: auto;
+    border: 1px solid var(--hairline);
+  }
+  .shot figcaption {
+    margin-top: 14px;
+    font-size: 0.85rem;
+    color: var(--muted);
+    text-align: center;
+  }
+
   /* ---------- section chrome ---------- */
   section { padding: 72px 0; }
   section + section { border-top: 1px solid var(--hairline); }
@@ -234,6 +253,13 @@
 </header>
 
 <main>
+  <div class="wrap shot">
+    <figure>
+      <img src="screenshot-send.jpg" alt="Sigil's Send tab: a 2-of-3 wallet with a built PSBT, showing recipient, fee rate and the prompt to connect a Ledger to sign" width="1456" height="648" loading="lazy">
+      <figcaption>Building a PSBT on a 2-of-3 wallet. Demo wallet, fabricated balances.</figcaption>
+    </figure>
+  </div>
+
   <section id="features" aria-labelledby="features-h">
     <div class="wrap">
       <h2 class="eyebrow" id="features-h">The coordinator</h2>
