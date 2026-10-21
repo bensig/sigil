@@ -451,10 +451,8 @@ export function SendForm({
       anchor.download = filename
       anchor.click()
       URL.revokeObjectURL(url)
+      // Keep the PSBT loaded: saving is how it goes to the next signer, not the end of the flow.
       setInfo(`Saved ${filename}`)
-      onPsbtChange(null)
-      onClear?.()
-      setStage('idle')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save PSBT')
     } finally {
@@ -501,7 +499,7 @@ export function SendForm({
   const handleCopy = async () => {
     if (!psbt) return
     await navigator.clipboard.writeText(psbt)
-    setInfo('PSBT copied to clipboard')
+    setInfo('PSBT text copied to clipboard')
   }
 
   const matchConfigSignerName = (name: string): string | null => {
@@ -875,6 +873,11 @@ export function SendForm({
                   ? 'Working...'
                   : primaryLabel}
           </button>
+          {stage === 'signed' && !needsRegeneration && psbt && (
+            <button type="button" className="btn-secondary w-full py-3" onClick={handleCopy}>
+              Copy PSBT Text
+            </button>
+          )}
           {regenAvailable && (
             <button
               type="button"
@@ -1082,26 +1085,51 @@ export function SendForm({
                   </div>
                 ) : (
                   <>
-                    <button
-                      type="button"
-                      className="btn-primary w-full"
-                      onClick={needsLedgerConnect ? onConnectLedger : handleSign}
-                      disabled={primaryDisabled}
-                    >
-                      {primaryLabel}
-                    </button>
-                    <button
-                      type="button"
-                      className={`w-full ${
-                        signedBy.length >= requiredSigners && !processing && !saving
-                          ? 'bg-green-600 hover:bg-green-700 text-white rounded py-2 font-medium'
-                          : 'btn-secondary'
-                      }`}
-                      onClick={handleBroadcast}
-                      disabled={!psbt || signedBy.length < requiredSigners || !onBroadcast || processing || saving}
-                    >
-                      Broadcast Transaction
-                    </button>
+                    {/* Signing is offered only while this Ledger still has something to sign */}
+                    {!fullySigned && !currentSignerHasSigned && (
+                      <button
+                        type="button"
+                        className="btn-primary w-full"
+                        onClick={needsLedgerConnect ? onConnectLedger : handleSign}
+                        disabled={primaryDisabled}
+                      >
+                        {processing ? 'Signing...' : primaryLabel}
+                      </button>
+                    )}
+                    {signedBy.length > 0 && !fullySigned && (
+                      <div className="text-sm text-ink/70 dark:text-slate-300">
+                        {signedBy.length}/{requiredSigners} signed{currentSignerHasSigned ? ` (${friendlySignerName(signerName)} done)` : ''}. Send this PSBT to the next signer:
+                      </div>
+                    )}
+                    {signedBy.length > 0 && (
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          className={`flex-1 py-3 ${fullySigned ? 'btn-secondary' : 'btn-primary'}`}
+                          onClick={handleSave}
+                          disabled={saving}
+                        >
+                          {saving ? 'Saving...' : 'Save Signed PSBT'}
+                        </button>
+                        <button
+                          type="button"
+                          className={`flex-1 py-3 ${fullySigned ? 'btn-secondary' : 'btn-primary'}`}
+                          onClick={handleCopy}
+                        >
+                          Copy PSBT Text
+                        </button>
+                      </div>
+                    )}
+                    {fullySigned && (
+                      <button
+                        type="button"
+                        className="bg-green-600 hover:bg-green-700 text-white rounded py-3 font-medium w-full disabled:opacity-50"
+                        onClick={handleBroadcast}
+                        disabled={!psbt || !onBroadcast || processing || saving}
+                      >
+                        {processing ? 'Broadcasting...' : 'Broadcast Transaction'}
+                      </button>
+                    )}
                   </>
                 )}
               </div>
