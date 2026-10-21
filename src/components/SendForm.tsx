@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect, useCallback } from 'react'
 import { Buffer } from 'buffer'
 import { FeeSelector } from './FeeSelector'
 import { PSBTDetails } from './PSBTDetails'
+import { psbtFilename } from '../lib/psbt-filename'
 import { QRExportModal } from './qr/QRExportModal'
 import { QRScanModal } from './qr/QRScanModal'
 import { UTXOSelector, utxoKey, type EnrichedUTXO, type AddressLabel } from './UTXOSelector'
@@ -104,7 +105,7 @@ export function SendForm({
   } | null>(null)
   const [psbtInfo, setPsbtInfo] = useState<{
     inputs: Array<{ txid: string; vout: number; amount: number }>
-    outputs: Array<{ address?: string; amount: number }>
+    outputs: Array<{ address?: string; amount: number; isChange?: boolean }>
     totalInput: number
     totalOutput: number
   } | null>(null)
@@ -311,7 +312,7 @@ export function SendForm({
           totalInput += amount
           inputsInfo.push({ txid, vout: txInput.index, amount })
         })
-        const outputsInfo = parsed.txOutputs.map(output => {
+        const outputsInfo = parsed.txOutputs.map((output, i) => {
           const out = output as { address?: string; value: number; script: Buffer }
           let addr = out.address
           if (!addr && out.script) {
@@ -320,6 +321,8 @@ export function SendForm({
           return {
             address: addr,
             amount: out.value,
+            // Outputs carrying our derivation paths go back to this wallet
+            isChange: Boolean(parsed.data.outputs[i]?.bip32Derivation?.length),
           }
         })
         const totalOutput = outputsInfo.reduce((sum, output) => sum + output.amount, 0)
@@ -435,15 +438,13 @@ export function SendForm({
     setInfo(null)
     setSaving(true)
     try {
-      const now = new Date()
-      const pad = (n: number) => n.toString().padStart(2, '0')
-      const timestamp = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`
-      const filenameRecipient = lastDetails?.recipient || psbtInfo?.outputs?.[0]?.address || 'psbt'
-      const amountForName = lastDetails?.amountSats ?? psbtInfo?.outputs?.[0]?.amount ?? 0
-      const amountBtc = amountForName ? satsToBtc(amountForName) : 'amount'
-      const sanitizedAmount = amountBtc.replace(/\./g, '_')
-      const shortAddress = filenameRecipient.replace(/[^a-zA-Z0-9]/g, '').slice(0, 12) || 'address'
-      const filename = `${shortAddress}-${sanitizedAmount}btc-${timestamp}.psbt`
+      const payments = (psbtInfo?.outputs ?? [])
+        .filter(o => !o.isChange)
+        .map(o => ({ ...o, label: o.address ? labelMap.get(o.address) : undefined }))
+      if (payments.length === 0 && lastDetails) {
+        payments.push({ address: lastDetails.recipient, amount: lastDetails.amountSats, label: labelMap.get(lastDetails.recipient) })
+      }
+      const filename = psbtFilename({ walletName: walletConfig.walletName, payments, signed: signedBy.length, required: requiredSigners })
       const blob = new Blob([psbt], { type: 'text/plain' })
       const url = URL.createObjectURL(blob)
       const anchor = document.createElement('a')
@@ -451,10 +452,8 @@ export function SendForm({
       anchor.download = filename
       anchor.click()
       URL.revokeObjectURL(url)
+      // Keep the PSBT loaded: saving is how it goes to the next signer, not the end of the flow.
       setInfo(`Saved ${filename}`)
-      onPsbtChange(null)
-      onClear?.()
-      setStage('idle')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save PSBT')
     } finally {
@@ -501,7 +500,7 @@ export function SendForm({
   const handleCopy = async () => {
     if (!psbt) return
     await navigator.clipboard.writeText(psbt)
-    setInfo('PSBT copied to clipboard')
+    setInfo('PSBT text copied to clipboard')
   }
 
   const matchConfigSignerName = (name: string): string | null => {
@@ -875,6 +874,11 @@ export function SendForm({
                   ? 'Working...'
                   : primaryLabel}
           </button>
+          {stage === 'signed' && !needsRegeneration && psbt && (
+            <button type="button" className="btn-secondary w-full py-3" onClick={handleCopy}>
+              Copy PSBT Text
+            </button>
+          )}
           {regenAvailable && (
             <button
               type="button"
@@ -1082,26 +1086,51 @@ export function SendForm({
                   </div>
                 ) : (
                   <>
-                    <button
-                      type="button"
-                      className="btn-primary w-full"
-                      onClick={needsLedgerConnect ? onConnectLedger : handleSign}
-                      disabled={primaryDisabled}
-                    >
-                      {primaryLabel}
-                    </button>
-                    <button
-                      type="button"
-                      className={`w-full ${
-                        signedBy.length >= requiredSigners && !processing && !saving
-                          ? 'bg-green-600 hover:bg-green-700 text-white rounded py-2 font-medium'
-                          : 'btn-secondary'
-                      }`}
-                      onClick={handleBroadcast}
-                      disabled={!psbt || signedBy.length < requiredSigners || !onBroadcast || processing || saving}
-                    >
-                      Broadcast Transaction
-                    </button>
+                    {/* Signing is offered only while this Ledger still has something to sign */}
+                    {!fullySigned && !currentSignerHasSigned && (
+                      <button
+                        type="button"
+                        className="btn-primary w-full"
+                        onClick={needsLedgerConnect ? onConnectLedger : handleSign}
+                        disabled={primaryDisabled}
+                      >
+                        {processing ? 'Signing...' : primaryLabel}
+                      </button>
+                    )}
+                    {signedBy.length > 0 && !fullySigned && (
+                      <div className="text-sm text-ink/70 dark:text-slate-300">
+                        {signedBy.length}/{requiredSigners} signed{currentSignerHasSigned ? ` (${friendlySignerName(signerName)} done)` : ''}. Send this PSBT to the next signer:
+                      </div>
+                    )}
+                    {signedBy.length > 0 && (
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          className={`flex-1 py-3 ${fullySigned ? 'btn-secondary' : 'btn-primary'}`}
+                          onClick={handleSave}
+                          disabled={saving}
+                        >
+                          {saving ? 'Saving...' : 'Save Signed PSBT'}
+                        </button>
+                        <button
+                          type="button"
+                          className={`flex-1 py-3 ${fullySigned ? 'btn-secondary' : 'btn-primary'}`}
+                          onClick={handleCopy}
+                        >
+                          Copy PSBT Text
+                        </button>
+                      </div>
+                    )}
+                    {fullySigned && (
+                      <button
+                        type="button"
+                        className="bg-green-600 hover:bg-green-700 text-white rounded py-3 font-medium w-full disabled:opacity-50"
+                        onClick={handleBroadcast}
+                        disabled={!psbt || !onBroadcast || processing || saving}
+                      >
+                        {processing ? 'Broadcasting...' : 'Broadcast Transaction'}
+                      </button>
+                    )}
                   </>
                 )}
               </div>

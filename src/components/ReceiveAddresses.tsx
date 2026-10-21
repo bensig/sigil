@@ -74,10 +74,6 @@ export function ReceiveAddresses({
     }
   }
 
-  const openMempool = (address: string) => {
-    window.open(`https://mempool.space/address/${address}`, '_blank')
-  }
-
   const receiveAddresses = addresses.filter(a => !a.isChange)
   const allChangeAddresses = addresses.filter(a => a.isChange).sort((a, b) => a.index - b.index)
   // Where change from the next send lands, when the wallet is set to use a
@@ -126,13 +122,15 @@ export function ReceiveAddresses({
         <div className={`flex items-start justify-between gap-2 ${isChange ? 'pr-14' : ''}`}>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
-              <button
-                onClick={() => openMempool(addr.address)}
+              <a
+                href={`https://mempool.space/address/${addr.address}`}
+                target="_blank"
+                rel="noopener noreferrer"
                 className="mono text-sm hover:underline text-left text-ink dark:text-slate-200"
                 title="Open in Mempool.space"
               >
                 {truncateAddress(addr.address)}
-              </button>
+              </a>
               <button
                 onClick={() => copyToClipboard(addr.address)}
                 className={`text-xs px-1.5 py-0.5 rounded transition-colors ${
