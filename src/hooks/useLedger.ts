@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react'
 import type { WalletConfig } from '../types'
+import type { MultisigAddressType } from '@caravan/bitcoin'
 
 type LedgerStatus = 'disconnected' | 'connecting' | 'connected' | 'signing' | 'error'
 
@@ -121,7 +122,7 @@ export function useLedger() {
       // Build wallet config matching Caravan's MultisigWalletConfig interface
       const walletConfig = {
         name: config.name,
-        addressType: P2WSH,
+        addressType: P2WSH as MultisigAddressType,
         network,
         quorum: {
           requiredSigners: config.quorum.requiredSigners,

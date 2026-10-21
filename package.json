@@ -11,10 +11,10 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@caravan/bitcoin": "^0.4.2",
-    "@caravan/clients": "^1.0.2",
-    "@caravan/psbt": "^2.0.3",
-    "@caravan/wallets": "^0.9.1",
+    "@caravan/bitcoin": "^0.4.6",
+    "@caravan/clients": "^1.0.5",
+    "@caravan/psbt": "^2.1.1",
+    "@caravan/wallets": "^0.11.0",
     "@keystonehq/bc-ur-registry-btc": "^0.1.1",
     "@ngraveio/bc-ur": "^1.1.13",
     "jsqr": "^1.4.0",
@@ -37,5 +37,8 @@
     "vite-plugin-top-level-await": "^1.6.0",
     "vite-plugin-wasm": "^3.5.0",
     "vitest": "^4.1.10"
+  },
+  "overrides": {
+    "protobufjs": "^7.6.6"
   }
 }
